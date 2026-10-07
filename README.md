@@ -64,7 +64,7 @@ Vedhæftede filer fjernes ikke af dette. Slet dem i appen først, eller under St
 
 - Alle ændringer gemmes automatisk. Pillen øverst til højre viser "Gemt", "Gemmer…" eller en fejl. Ved fejl prøver appen igen, og ændringerne ligger i vinduet, indtil de er gemt. Luk ikke fanen, mens der står "Gemmer…" eller en fejl.
 - "Hent data igen" henter det nyeste fra databasen, fx efter ændringer fra en anden enhed.
-- Aktiviteter og projekter har sektionen Vedhæftninger nederst i detaljevisningen. Tilføj fil uploader til en privat mappe i Supabase Storage (op til 25 MB pr. fil, 1 GB samlet på gratis-planen). Tryk på filnavnet for at åbne den, og Slet for at fjerne den. Når du redigerer en aktivitet, kan du også tilføje og fjerne omtalte projekter.
+- Aktiviteter og projekter har sektionen Vedhæftninger nederst i detaljevisningen. Tilføj fil uploader til en privat mappe i Supabase Storage (op til 25 MB pr. fil, 1 GB samlet på gratis-planen). Tryk på filnavnet for at åbne den, og Slet for at fjerne den. Når du redigerer en aktivitet, kan du også tilføje og fjerne omtalte projekter. Hvert omtalt projekt har sit eget felt til intel, som vises på projektet.
 - Rediger og slet findes øverst i detaljevisningen for person, virksomhed, aktivitet og projekt. Sletning kan ikke fortrydes.
 - Appen kan installeres: i Chrome eller Edge via installationsikonet i adresselinjen, på iPhone via Del, Føj til hjemmeskærm.
 

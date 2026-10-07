@@ -108,6 +108,8 @@ textarea { width: 100%; resize: vertical; }
 .detail h3 { padding-bottom: 4px; border-bottom: 1px solid var(--line); }
 .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; text-align: left; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pnotes { display: grid; gap: 10px; margin-top: 10px; }
+.pnotes label { display: grid; gap: 4px; font-weight: 600; }
 .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; background: var(--bg); }
 .chip button { background: none; border: 0; cursor: pointer; padding: 0 2px; color: var(--muted); font-size: 15px; line-height: 1; }
 .kv { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; }
@@ -456,6 +458,7 @@ textarea { width: 100%; resize: vertical; }
           <label for="f-np-why">Begrundelse, hvis fravalgt<input type="text" id="f-np-why" placeholder="fx Uden for vores kerne"></label>
         </div>
         <div class="chips" id="f-jchips"></div>
+        <div id="f-jnotes"></div>
       </div>
       <label for="f-note">Noter og intel<textarea id="f-note" rows="4" placeholder="Hvad blev sagt om kommende opgaver, personer og sammenhænge?"></textarea></label>
       <div class="field">

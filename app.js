@@ -80,7 +80,8 @@
   var tab = 'p';
   var sel = { p: null, f: null, a: null, l: null, k: null, kp: null };
   var open = { p: false, f: false, a: false, l: false, j: false };
-  var formPeople = [], formProjs = [], formKol = [], formFu = [];
+  var formPeople = [], formProjs = [], formKol = [], formFu = [], formPN = {};
+  function pnUI(ids, store, attr) { return ids.length ? '<div class="pnotes">' + ids.map(function (id) { var p = byId(projects, id); return p ? '<label>Intel om ' + esc(p.navn) + '<textarea rows="3" ' + attr + '="' + id + '" placeholder="Hvad blev sagt om dette projekt?">' + esc(store[id] || '') + '</textarea></label>' : ''; }).join('') + '</div>' : ''; }
 
   function pickInitial() {
     var withActs = persons.filter(function (p) { return !isColleague(p) && lastMet(p.id); });
@@ -395,6 +396,8 @@
       h += '<div class="callout"><p>Ingen aktivitet endnu. Projektet kom ind via ' + esc(KILDE[pr.kilde]) + (pr.rm ? ' med ' + esc(pr.rm) : '') + '. Næste skridt er at finde en kontakt hos ' + esc(bnavn(pr)) + ' og registrere en aktivitet, hvor projektet nævnes.</p></div>';
     }
     h += '<div class="actions"><button type="button" class="btn small" data-newactproj="' + pr.id + '">Ny aktivitet med dette projekt</button></div></section>';
+    var pnA = as.filter(function (a) { return a.pn && a.pn[pr.id]; });
+    if (pnA.length) h += '<section><h3>Noter og intel</h3><ul class="alist">' + pnA.map(function (a) { return '<li><div class="hd"><span class="ty">' + esc(a.type) + '</span><span class="dt">' + fmtDate(a.dato) + '</span>' + go('a', a.id) + esc(a.titel) + '</button></div><span class="note">' + esc(a.pn[pr.id]) + '</span></li>'; }).join('') + '</ul></section>';
     h += '<section><h3>Ændringer</h3>' + (pr.log.length ? '<ul class="logl">' + pr.log.map(function (l) { return '<li><span class="muted">' + fmtDate(l.dato) + '</span> ' + esc(l.tekst) + '</li>'; }).join('') + '</ul>' : '<p class="muted">Ingen ændringer registreret efter oprettelsen.</p>') + '</section>';
     return h;
   }
@@ -842,6 +845,8 @@
         groups[k].map(function (p) { return go('p', p.id) + esc(p.navn) + '</button>' + (isColleague(p) ? ' <span class="badge">Kollega</span>' : ''); }).join(', ') + '</span></li>';
     }).join('') + '</ul></section>';
     h += '<section><h3>Nævnte projekter</h3>' + (a.proj.length ? '<ul class="plist">' + a.proj.map(function (id) { return projRow(byId(projects, id), ''); }).join('') + '</ul>' : '<p class="muted">Ingen projekter nævnt.</p>') + '</section>';
+    var pnIds = a.proj.filter(function (id) { return a.pn && a.pn[id] && byId(projects, id); });
+    if (pnIds.length) h += '<section><h3>Intel pr. projekt</h3><ul class="blist">' + pnIds.map(function (id) { return '<li><strong><button type="button" class="link" data-pj="' + id + '">' + esc(byId(projects, id).navn) + '</button></strong><span>' + esc(a.pn[id]) + '</span></li>'; }).join('') + '</ul></section>';
     h += fuSection('a', a.id);
     return h;
   }
@@ -945,16 +950,18 @@
     $('#f-fu-v').innerHTML = varselOptions(); $('#o-v').innerHTML = varselOptions();
   }
   function resetForm() {
-    formPeople = []; formProjs = []; formKol = []; formFu = [];
+    formPeople = []; formProjs = []; formKol = []; formFu = []; formPN = {};
     $('#f-date').value = TODAY; $('#f-title').value = ''; $('#f-place').value = ''; $('#f-note').value = ''; $('#f-pq').value = '';
     $('#f-me').checked = true; $('#f-kolbox').hidden = true; $('#f-kol').value = '';
     $('#f-np-name').value = ''; $('#f-np-why').value = ''; $('#f-proj').value = ''; $('#f-newproj').hidden = true;
     $('#f-fu-t').value = ''; $('#f-fu-d').value = addDays(TODAY, 14); $('#f-fu-v').value = '0'; $('#f-err').textContent = '';
     renderFormChips(); renderPicks();
   }
+  function pnClean(store, ids) { var o = {}; ids.forEach(function (id) { var v = (store[id] || '').trim(); if (v) o[id] = v; }); return o; }
   function renderFormChips() {
     $('#f-pchips').innerHTML = formPeople.map(function (id) { var p = byId(persons, id), f = firmOf(p); return '<span class="chip">' + esc(p.navn) + (f ? '<span class="muted">' + esc(f.navn) + '</span>' : '') + '<button type="button" data-rmp="' + id + '" aria-label="Fjern ' + esc(p.navn) + '">×</button></span>'; }).join('');
     $('#f-jchips').innerHTML = formProjs.map(function (id) { var p = byId(projects, id); return '<span class="chip">' + esc(p.navn) + '<span class="muted">' + PH[p.fase].n + '</span><button type="button" data-rmj="' + id + '" aria-label="Fjern ' + esc(p.navn) + '">×</button></span>'; }).join('');
+    $('#f-jnotes').innerHTML = pnUI(formProjs, formPN, 'data-jn');
     $('#f-kchips').innerHTML = formKol.map(function (id) { var p = byId(persons, id); return '<span class="chip">' + esc(p.navn) + '<button type="button" data-rmk="' + id + '" aria-label="Fjern ' + esc(p.navn) + '">×</button></span>'; }).join('');
     $('#f-fchips').innerHTML = formFu.map(function (f, i) { return '<span class="chip">' + esc(f.tekst) + '<span class="muted">' + fmtDate(f.forfald) + '</span><button type="button" data-rmf="' + i + '" aria-label="Fjern opfølgning">×</button></span>'; }).join('');
     var sel2 = $('#f-fu-p'), keep = sel2.value;
@@ -1004,7 +1011,7 @@
     if (!people.length) { err.textContent = 'Tilføj mindst én deltager.'; return; }
     var type = $('#f-type').value, first = byId(persons, people[0]);
     var titel = $('#f-title').value.trim() || (type + ' med ' + first.navn);
-    var a = { id: nextId(acts), type: type, dato: $('#f-date').value || TODAY, titel: titel, sted: $('#f-place').value.trim(), people: people, note: $('#f-note').value.trim(), proj: formProjs.slice(), me: me, via: me ? [] : formKol.slice() };
+    var a = { id: nextId(acts), type: type, dato: $('#f-date').value || TODAY, titel: titel, sted: $('#f-place').value.trim(), people: people, note: $('#f-note').value.trim(), proj: formProjs.slice(), pn: pnClean(formPN, formProjs), me: me, via: me ? [] : formKol.slice() };
     acts.push(a);
     formFu.forEach(function (f) { followups.push({ id: nextId(followups), tekst: f.tekst, forfald: f.forfald, person: f.person, act: a.id, proj: 0, done: false, varsel: f.varsel }); });
     $('#form-a').hidden = true;
@@ -1192,6 +1199,7 @@
   $('#f-pq').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); var b = $('#f-picks button'); if (b) b.click(); } });
   $('#f-proj').addEventListener('change', function () { $('#f-newproj').hidden = $('#f-proj').value !== 'new'; });
   $('#f-padd').addEventListener('click', addProject);
+  document.addEventListener('input', function (e) { var t = e.target; if (t && t.getAttribute && t.getAttribute('data-jn')) formPN[+t.getAttribute('data-jn')] = t.value; });
   $('#f-fu-add').addEventListener('click', addFormFu);
   $('#new-o').addEventListener('click', function () { var f = $('#form-o'); f.hidden = !f.hidden; if (!f.hidden) { $('#o-d').value = $('#o-d').value || addDays(TODAY, 7); $('#o-t').focus(); } });
   $('#o-cancel').addEventListener('click', function () { $('#form-o').hidden = true; });
@@ -1352,7 +1360,8 @@
       acts.push({ id: numOf('a', v.id), type: TYPE_UI[v.type] || 'Andet', dato: v.dato, titel: v.titel, sted: v.sted || '', note: v.noter || '', me: v.jeg_deltog !== false,
         via: v.via_kollega_id ? [numOf('p', v.via_kollega_id)] : [],
         people: (dl[v.id] || []).map(function (d) { return numOf('p', d.person_id); }),
-        proj: (ap[v.id] || []).map(function (d) { return numOf('j', d.projekt_id); }) });
+        proj: (ap[v.id] || []).map(function (d) { return numOf('j', d.projekt_id); }),
+        pn: (ap[v.id] || []).reduce(function (o, d) { if (d.intel) o[numOf('j', d.projekt_id)] = d.intel; return o; }, {}) });
     });
     (D.vedhaeftning || []).forEach(function (v) {
       var o = v.aktivitet_id ? byId(acts, numOf('a', v.aktivitet_id)) : byId(projects, numOf('j', v.projekt_id)); if (!o) return;
@@ -1409,7 +1418,7 @@
       var id = uidOf('a', a.id), via = a.via && a.via.length ? uidOf('p', a.via[0]) : null;
       R.aktivitet[id] = { id: id, dato: a.dato, type: TYPE_DB[a.type] || 'andet', titel: a.titel, noter: qd(a.note), sted: qd(a.sted), jeg_deltog: !!a.me, via_kollega_id: via && R.person[via] ? via : null };
       a.people.forEach(function (pid) { var pu = uidOf('p', pid); if (pu && R.person[pu]) R.aktivitet_deltager[id + '|' + pu] = { aktivitet_id: id, person_id: pu }; });
-      a.proj.forEach(function (jid) { var ju = uidOf('j', jid); if (ju && R.projekt[ju]) R.aktivitet_projekt[id + '|' + ju] = { aktivitet_id: id, projekt_id: ju }; });
+      a.proj.forEach(function (jid) { var ju = uidOf('j', jid); if (ju && R.projekt[ju]) R.aktivitet_projekt[id + '|' + ju] = { aktivitet_id: id, projekt_id: ju, intel: qd((a.pn || {})[jid]) }; });
     });
     followups.forEach(function (f) {
       var id = uidOf('o', f.id);
@@ -1942,16 +1951,17 @@
         edField('Antal medarbejdere', 'ed-medarb', '') + edAdr(null) + '</div>' + edArea('Noter', 'ed-note', '');
     }
     ed = { kind: kind, id: id }; $('#ed-del').hidden = false;
-    if (kind === 'a') ed.proj = o.proj.slice();
+    if (kind === 'a') { ed.proj = o.proj.slice(); ed.pn = {}; Object.keys(o.pn || {}).forEach(function (k) { ed.pn[k] = o.pn[k]; }); }
     $('#ed-h').textContent = title; $('#ed-body').innerHTML = h + '<div class="err" id="ed-err" role="alert"></div>'; $('#ed').hidden = false;
     if (kind === 'a') edProjUI();
     setTimeout(function () { var e = $('#ed-body input'); if (e) e.focus(); }, 20);
   }
   function edProjUI() {
     var box = $('#ed-projs'); if (!box) return;
+    var sv = document.querySelectorAll('[data-edjn]'); for (var q = 0; q < sv.length; q++) ed.pn[sv[q].getAttribute('data-edjn')] = sv[q].value;
     var rest = projects.filter(function (p) { return ed.proj.indexOf(p.id) < 0; }).sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); });
     box.innerHTML = '<h3>Nævnte projekter</h3><div class="chips">' + (ed.proj.length ? ed.proj.map(function (id) { var p = byId(projects, id); return p ? '<span class="chip">' + esc(p.navn) + '<button type="button" class="chipx" data-edrmproj="' + id + '" aria-label="Fjern ' + esc(p.navn) + '">×</button></span>' : ''; }).join('') : '<span class="muted">Ingen projekter nævnt.</span>') + '</div>' +
-      (rest.length ? '<div class="actions"><select id="ed-addproj" aria-label="Tilføj projekt"><option value="">Vælg projekt…</option>' + rest.map(function (p) { return '<option value="' + p.id + '">' + esc(p.navn) + '</option>'; }).join('') + '</select><button type="button" class="btn small" id="ed-addproj-go">Tilføj</button></div>' : '');
+      pnUI(ed.proj, ed.pn, 'data-edjn') + (rest.length ? '<div class="actions"><select id="ed-addproj" aria-label="Tilføj projekt"><option value="">Vælg projekt…</option>' + rest.map(function (p) { return '<option value="' + p.id + '">' + esc(p.navn) + '</option>'; }).join('') + '</select><button type="button" class="btn small" id="ed-addproj-go">Tilføj</button></div>' : '');
   }
 
   function edAddr(o, locKey) {
@@ -1994,7 +2004,7 @@
       edAddr(o, 'adr'); if (v('ed-by')) o.by = v('ed-by');
     } else if (ed.kind === 'a') {
       o = byId(acts, ed.id); if (!v('ed-titel')) { err.textContent = 'Skriv en titel.'; return; } if (!v('ed-dato')) { err.textContent = 'Vælg en dato.'; return; }
-      o.titel = v('ed-titel'); o.dato = v('ed-dato'); o.type = $('#ed-type').value; o.sted = v('ed-sted'); o.note = v('ed-note'); o.proj = ed.proj.slice();
+      o.titel = v('ed-titel'); o.dato = v('ed-dato'); o.type = $('#ed-type').value; o.sted = v('ed-sted'); o.note = v('ed-note'); o.proj = ed.proj.slice(); o.pn = pnClean((function () { var s = {}; Object.keys(ed.pn).forEach(function (k) { s[k] = ed.pn[k]; }); var e = document.querySelectorAll('[data-edjn]'); for (var q = 0; q < e.length; q++) s[e[q].getAttribute('data-edjn')] = e[q].value; return s; })(), o.proj);
     } else if (ed.kind === 'j') {
       o = byId(projects, ed.id); if (!v('ed-navn')) { err.textContent = 'Skriv et projektnavn.'; return; }
       o.navn = v('ed-navn'); edAddr(o, 'loc');
