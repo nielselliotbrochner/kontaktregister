@@ -1,4 +1,3 @@
-
 (function () {
   function $(s, r) { return (r || document).querySelector(s); }
   function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
@@ -1932,7 +1931,12 @@
       o = byId(projects, id); title = 'Rediger ' + o.navn;
       h = '<div class="fgrid">' + edField('Projektnavn', 'ed-navn', o.navn) + edAdr(o) + '</div><p class="muted">Fase, start, honorar og bygherre ændres direkte i projektets stamdata.</p>';
     }
-    ed = { kind: kind, id: id };
+    if (kind === 'fnew') {
+      title = 'Ny virksomhed';
+      h = '<div class="fgrid">' + edField('Navn', 'ed-navn', '') + edSel('Type', 'ed-kat', Object.keys(KAT).filter(function (k) { return k !== 'egen'; }).map(function (k) { return [k, KAT[k]]; }), 'bygherre') + edField('CVR', 'ed-cvr', '') + edField('Hjemmeside', 'ed-web', '') +
+        edField('Antal medarbejdere', 'ed-medarb', '') + edAdr(null) + '</div>' + edArea('Noter', 'ed-note', '');
+    }
+    ed = { kind: kind, id: id }; $('#ed-del').hidden = false;
     $('#ed-h').textContent = title; $('#ed-body').innerHTML = h + '<div class="err" id="ed-err" role="alert"></div>'; $('#ed').hidden = false;
     setTimeout(function () { var e = $('#ed-body input'); if (e) e.focus(); }, 20);
   }
@@ -1946,6 +1950,17 @@
   function saveEdit() {
     var err = $('#ed-err'), o, v = function (id) { return $('#' + id).value.trim(); };
     err.textContent = '';
+    if (ed.kind === 'fnew') {
+      var nn = v('ed-navn'); if (!nn) { err.textContent = 'Skriv et navn.'; return; }
+      var dupf = firms.filter(function (x) { return normN(x.navn) === normN(nn); })[0];
+      if (dupf) { err.textContent = nn + ' findes allerede. Søg efter virksomheden i listen.'; return; }
+      var md = v('ed-medarb'); if (md && isNaN(parseInt(md.replace(/\./g, ''), 10))) { err.textContent = 'Antal medarbejdere skal være et tal.'; return; }
+      var kt = $('#ed-kat').value;
+      var nfm = { id: nextId(firms), navn: nn, kat: kt, sub: KAT[kt] || '', by: v('ed-by'), cvr: v('ed-cvr'), medarb: md ? parseInt(md.replace(/\./g, ''), 10) : null, web: v('ed-web').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, ''), note: v('ed-note'), typ: {} };
+      if (v('ed-vej') || v('ed-post') || v('ed-by')) nfm.adrx = { vej: v('ed-vej'), post: v('ed-post'), by: v('ed-by') };
+      firms.push(nfm); sel.f = nfm.id; open.f = true;
+      closeEdit(); setupForm(); renderAll(); showTab('f'); toast(nn + ' er tilføjet. Gemmer…'); schedule(100); return;
+    }
     if (ed.kind === 'p') {
       o = byId(persons, ed.id); var nm = v('ed-navn').replace(/\s+/g, ' '), em = v('ed-email');
       if (!nm) { err.textContent = 'Skriv et navn.'; return; }
@@ -1997,6 +2012,7 @@
   document.addEventListener('click', function (e) {
     var t = e.target; if (!t || !t.closest) return;
     var b = t.closest('[data-edit]'); if (b) { var p = b.getAttribute('data-edit').split(':'); openEdit(p[0], +p[1]); return; }
+    if (t.closest('#np-f')) { openEdit('fnew', 0); var dl = $('#ed-del'); if (dl) dl.hidden = true; return; }
     if (t.closest('#ed-go')) { if (ed) saveEdit(); return; }
     if (t.closest('#ed-x')) { closeEdit(); return; }
     if (t.closest('#ed-del')) { if (ed) deleteRec(); return; }
