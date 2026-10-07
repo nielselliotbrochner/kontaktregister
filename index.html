@@ -367,7 +367,9 @@ textarea { width: 100%; resize: vertical; }
       <h2>Ny person</h2>
       <p class="muted">Du kan også tilføje en person direkte, mens du registrerer en aktivitet, eller fra en virksomheds side.</p>
       <div class="fgrid">
-        <label for="pn-name">Navn<input type="text" id="pn-name" placeholder="For- og efternavn"></label>
+        <label for="pn-fn">Fornavn<input type="text" id="pn-fn" autocomplete="off"></label>
+        <label for="pn-mn">Mellemnavn (valgfrit)<input type="text" id="pn-mn" autocomplete="off"></label>
+        <label for="pn-en">Efternavn<input type="text" id="pn-en" autocomplete="off"></label>
         <label for="pn-firm">Virksomhed<select id="pn-firm"></select></label>
         <label for="pn-titel">Titel<input type="text" id="pn-titel" placeholder="fx Teknisk direktør"></label>
         <label for="pn-email">E-mail<input type="email" id="pn-email" placeholder="navn@virksomhed.dk"></label>

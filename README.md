@@ -50,7 +50,7 @@ Vedhæftede filer fjernes ikke af dette. Slet dem i appen først, eller under St
 
 ## 4. Importér rigtige data
 
-**Kontakter** (fanen Personer, knappen "Importér kontakter"): vælg en CSV-fil. Kolonner genkendes på navn, og du kan rette koblingen i dialogen, før du importerer. Kendte kolonnenavne: Fornavn, Efternavn eller Navn, Titel, E-mail, Telefon, Virksomhed (eller Firma), CVR, Adresse, Postnr, By, Hjemmeside, Type, Mærker, Noter. Skilletegn (semikolon, komma, tabulator) og tegnsæt (UTF-8 eller Excel) findes automatisk.
+**Kontakter** (fanen Personer, knappen "Importér kontakter"): vælg en CSV-fil. Kolonner genkendes på navn, og du kan rette koblingen i dialogen, før du importerer. Kendte kolonnenavne: Fornavn, Mellemnavn, Efternavn eller Navn (deles automatisk i for-, mellem- og efternavn: første ord er fornavn, sidste er efternavn), Titel, E-mail, Telefon, Virksomhed (eller Firma), CVR, Adresse, Postnr, By, Hjemmeside, Type, Mærker, Noter. Skilletegn (semikolon, komma, tabulator) og tegnsæt (UTF-8 eller Excel) findes automatisk.
 
 - Virksomheder matches på CVR eller navn. Personer matches på e-mail eller navn og virksomhed.
 - Eksisterende poster overskrives ikke. Manglende felter udfyldes.

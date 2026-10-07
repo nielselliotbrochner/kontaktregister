@@ -526,12 +526,12 @@
     var f = $('#form-p'); f.hidden = false;
     if (firmId) { $('#pn-firm').value = String(firmId); $('#pn-newbox').hidden = true; }
     $('#pn-err').textContent = '';
-    $('#pn-name').focus();
+    $('#pn-fn').focus();
   }
   function savePerson() {
-    var err = $('#pn-err'), name = $('#pn-name').value.trim().replace(/\s+/g, ' '), fv = $('#pn-firm').value, firmId = 0;
+    var err = $('#pn-err'), pfn = $('#pn-fn').value.trim().replace(/\s+/g, ' '), pmn = $('#pn-mn').value.trim().replace(/\s+/g, ' '), pen = $('#pn-en').value.trim().replace(/\s+/g, ' '), name = joinName(pfn, pmn, pen), fv = $('#pn-firm').value, firmId = 0;
     err.textContent = '';
-    if (!name) { err.textContent = 'Skriv personens navn.'; $('#pn-name').focus(); return; }
+    if (!pfn) { err.textContent = 'Skriv personens fornavn.'; $('#pn-fn').focus(); return; }
     if (fv === 'new') {
       if (!$('#pn-nn').value.trim()) { err.textContent = 'Skriv navnet på den nye virksomhed.'; return; }
     } else firmId = +fv;
@@ -545,13 +545,13 @@
       firms.push(nf); firmId = nf.id;
     }
     var fra = $('#pn-fy').value + '-' + $('#pn-fm').value;
-    var np = { id: nextId(persons), navn: name, tags: $('#pn-tags').value.split(',').map(function (t) { return t.trim(); }).filter(Boolean), bek: TODAY.slice(0, 7), emp: [], nej: false };
+    var np = { id: nextId(persons), navn: name, fn: pfn, mn: pmn, en: pen, tags: $('#pn-tags').value.split(',').map(function (t) { return t.trim(); }).filter(Boolean), bek: TODAY.slice(0, 7), emp: [], nej: false };
     if (firmId) np.emp.push({ firm: firmId, titel: $('#pn-titel').value.trim(), fra: fra, til: null });
     if (em) np.email = em;
     if ($('#pn-tel').value.trim()) np.tel = $('#pn-tel').value.trim();
     persons.push(np);
     sel.p = np.id; open.p = true;
-    ['pn-name', 'pn-titel', 'pn-email', 'pn-tel', 'pn-tags', 'pn-nn'].forEach(function (id) { $('#' + id).value = ''; });
+    ['pn-fn', 'pn-mn', 'pn-en', 'pn-titel', 'pn-email', 'pn-tel', 'pn-tags', 'pn-nn'].forEach(function (id) { $('#' + id).value = ''; });
     $('#pn-firm').value = '0'; $('#pn-newbox').hidden = true; $('#form-p').hidden = true;
     ['q-p'].forEach(function (id) { $('#' + id).value = ''; }); $('#k-p').value = ''; $('#t-p').value = ''; $('#l-p').value = '';
     fillFuPersonSelects(); renderAll(); showTab('p');
@@ -1258,6 +1258,10 @@
   function qd(v) { return v == null || v === '' ? null : v; }
   function dm(ym) { return ym ? (String(ym).length === 7 ? ym + '-01' : String(ym).slice(0, 10)) : null; }
   function splitName(n) { n = String(n || '').trim(); var i = n.indexOf(' '); return i < 0 ? [n, null] : [n.slice(0, i), n.slice(i + 1)]; }
+  function parseName(n) { var t = String(n || '').trim().split(/\s+/).filter(Boolean); if (t.length <= 1) return { fn: t[0] || '', mn: '', en: '' }; return { fn: t[0], mn: t.slice(1, -1).join(' '), en: t[t.length - 1] }; }
+  function joinName(fn, mn, en) { return [fn, mn, en].map(function (x) { return String(x || '').trim(); }).filter(Boolean).join(' '); }
+  function nameParts(p) { if ((p.fn != null || p.en != null) && joinName(p.fn, p.mn, p.en) === p.navn) return { fn: p.fn || '', mn: p.mn || '', en: p.en || '' }; return parseName(p.navn); }
+  function setName(p, fn, mn, en) { p.fn = String(fn || '').trim(); p.mn = String(mn || '').trim(); p.en = String(en || '').trim(); p.navn = joinName(p.fn, p.mn, p.en); }
   function localISO(d) { var z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 10); }
 
   /* ---------- Status ---------- */
@@ -1315,7 +1319,7 @@
       else { TAGU[l.navn] = l.id; tagOf[l.id] = l.navn; }
     });
     D.person.forEach(function (v) {
-      var p = { id: numOf('p', v.id), navn: (v.fornavn + (v.efternavn ? ' ' + v.efternavn : '')).trim(), tags: [], bek: (v.bekendt_siden || v.oprettet_at || '').slice(0, 7) || TODAY.slice(0, 7), emp: [], nej: !!v.ikke_invitation };
+      var p = { id: numOf('p', v.id), navn: joinName(v.fornavn, v.mellemnavn, v.efternavn), fn: v.fornavn || '', mn: v.mellemnavn || '', en: v.efternavn || '', tags: [], bek: (v.bekendt_siden || v.oprettet_at || '').slice(0, 7) || TODAY.slice(0, 7), emp: [], nej: !!v.ikke_invitation };
       if (v.email) p.email = v.email; if (v.telefon) p.tel = v.telefon; if (v.linkedin) p.li = v.linkedin; if (v.noter) p.note = v.noter;
       var es = (emps[v.id] || []).slice().sort(function (a, b) { return (a.fra_dato || '') < (b.fra_dato || '') ? -1 : 1; });
       es.forEach(function (e) { p.emp.push({ firm: numOf('f', e.virksomhed_id), titel: e.titel || '', fra: e.fra_dato ? e.fra_dato.slice(0, 7) : '', til: e.til_dato ? e.til_dato.slice(0, 7) : null, _id: e.id }); });
@@ -1387,8 +1391,8 @@
     });
     var tagIds = {};
     persons.forEach(function (p) {
-      var id = uidOf('p', p.id), c = cur(p), nm = splitName(p.navn);
-      R.person[id] = { id: id, virksomhed_id: c ? uidOf('f', c.firm) : null, fornavn: nm[0], efternavn: nm[1], titel: c ? qd(c.titel) : null, email: qd(p.email), telefon: qd(p.tel), linkedin: qd(p.li),
+      var id = uidOf('p', p.id), c = cur(p), nm = nameParts(p);
+      R.person[id] = { id: id, virksomhed_id: c ? uidOf('f', c.firm) : null, fornavn: nm.fn, mellemnavn: qd(nm.mn), efternavn: qd(nm.en), titel: c ? qd(c.titel) : null, email: qd(p.email), telefon: qd(p.tel), linkedin: qd(p.li),
         er_kollega: isColleague(p), noter: qd(p.note), bekendt_siden: dm(p.bek), ikke_invitation: !!p.nej };
       p.emp.forEach(function (e) {
         if (!e.firm) return;
@@ -1651,6 +1655,7 @@
 
   var CF = [
     { k: 'fornavn', n: 'Fornavn', al: ['fornavn', 'firstname', 'givenname', 'first name'] },
+    { k: 'mellemnavn', n: 'Mellemnavn', al: ['mellemnavn', 'middlename', 'middle name'] },
     { k: 'efternavn', n: 'Efternavn', al: ['efternavn', 'lastname', 'surname', 'familyname'] },
     { k: 'navn', n: 'Fulde navn', al: ['navn', 'name', 'fuldenavn', 'fullname', 'kontaktperson', 'person'] },
     { k: 'titel', n: 'Titel', al: ['titel', 'title', 'stilling', 'jobtitle', 'jobtitel', 'position'] },
@@ -1751,7 +1756,8 @@
     persons.forEach(function (p) { if (p.email) pEmail[p.email.toLowerCase()] = p; var c = cur(p); pKey[normH(p.navn) + '|' + (c ? c.firm : 0)] = p; });
     var skipped = 0, existing = 0, filled = 0;
     rows.forEach(function (r) {
-      var name = (map.fornavn >= 0 ? (fg(r, 'fornavn') + ' ' + fg(r, 'efternavn')) : fg(r, 'navn')).replace(/\s+/g, ' ').trim();
+      var pt = map.fornavn >= 0 ? { fn: fg(r, 'fornavn'), mn: fg(r, 'mellemnavn'), en: fg(r, 'efternavn') } : parseName(fg(r, 'navn'));
+      var name = joinName(pt.fn, pt.mn, pt.en).replace(/\s+/g, ' ');
       if (!name) { skipped++; return; }
       var fn = fg(r, 'firma'), cvr = fg(r, 'cvr').replace(/\D/g, ''), f = null, isNew = false;
       if (cvr && byCvr[cvr]) f = byCvr[cvr]; else if (fn && byNm[normN(fn)]) f = byNm[normN(fn)];
@@ -1788,7 +1794,7 @@
         }
         return;
       }
-      var np = { _tmpP: true, navn: name, firm: f, titel: ti, email: em ? fg(r, 'email') : '', tel: tel, tags: tags, note: nt };
+      var np = { _tmpP: true, navn: name, fn: pt.fn.trim(), mn: pt.mn.trim(), en: pt.en.trim(), firm: f, titel: ti, email: em ? fg(r, 'email') : '', tel: tel, tags: tags, note: nt };
       res.newPersons.push(np);
       if (em) pEmail[em] = np;
       pKey[normH(name) + '|' + fk(f)] = np;
@@ -1808,7 +1814,7 @@
     pl.newFirms.forEach(function (f) { f.id = nextId(firms); delete f._tmp; firms.push(f); });
     var month = TODAY.slice(0, 7);
     pl.newPersons.forEach(function (x) {
-      var p = { id: nextId(persons), navn: x.navn, tags: x.tags, bek: month, emp: [], nej: false };
+      var p = { id: nextId(persons), navn: x.navn, fn: x.fn, mn: x.mn, en: x.en, tags: x.tags, bek: month, emp: [], nej: false };
       if (x.firm) p.emp.push({ firm: x.firm.id, titel: x.titel, fra: month, til: null });
       if (x.email) p.email = x.email; if (x.tel) p.tel = x.tel; if (x.note) p.note = x.note;
       persons.push(p);
@@ -1932,7 +1938,8 @@
     var h = '', title = '', o;
     if (kind === 'p') {
       o = byId(persons, id); var c = cur(o); title = 'Rediger ' + o.navn;
-      h = '<div class="fgrid">' + edField('Navn', 'ed-navn', o.navn) + (c ? edField('Titel', 'ed-titel', c.titel) : '') + edField('E-mail', 'ed-email', o.email, 'email') + edField('Telefon', 'ed-tel', o.tel, 'tel') +
+      var nmp = nameParts(o);
+      h = '<div class="fgrid">' + edField('Fornavn', 'ed-fn', nmp.fn) + edField('Mellemnavn (valgfrit)', 'ed-mn', nmp.mn) + edField('Efternavn', 'ed-en', nmp.en) + (c ? edField('Titel', 'ed-titel', c.titel) : '') + edField('E-mail', 'ed-email', o.email, 'email') + edField('Telefon', 'ed-tel', o.tel, 'tel') +
         edField('LinkedIn', 'ed-li', o.li) + edField('Mærker, adskilt med komma', 'ed-tags', (o.tags || []).join(', ')) + '</div>' + edArea('Noter', 'ed-note', o.note);
     } else if (kind === 'f') {
       o = byId(firms, id); title = 'Rediger ' + o.navn;
@@ -1986,10 +1993,10 @@
       closeEdit(); setupForm(); renderAll(); showTab('f'); toast(nn + ' er tilføjet. Gemmer…'); schedule(100); return;
     }
     if (ed.kind === 'p') {
-      o = byId(persons, ed.id); var nm = v('ed-navn').replace(/\s+/g, ' '), em = v('ed-email');
-      if (!nm) { err.textContent = 'Skriv et navn.'; return; }
+      o = byId(persons, ed.id); var nfn = v('ed-fn').replace(/\s+/g, ' '), em = v('ed-email');
+      if (!nfn) { err.textContent = 'Skriv et fornavn.'; return; }
       if (em && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { err.textContent = 'E-mailadressen ser ikke rigtig ud.'; return; }
-      o.navn = nm; var c = cur(o); if (c && $('#ed-titel')) c.titel = v('ed-titel');
+      setName(o, nfn, v('ed-mn').replace(/\s+/g, ' '), v('ed-en').replace(/\s+/g, ' ')); var c = cur(o); if (c && $('#ed-titel')) c.titel = v('ed-titel');
       if (em) o.email = em; else delete o.email;
       if (v('ed-tel')) o.tel = v('ed-tel'); else delete o.tel;
       if (v('ed-li')) o.li = v('ed-li'); else delete o.li;
