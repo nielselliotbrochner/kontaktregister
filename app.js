@@ -1,3 +1,4 @@
+
 (function () {
   function $(s, r) { return (r || document).querySelector(s); }
   function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
@@ -1279,7 +1280,7 @@
     setStatus('busy', 'Henter data…');
     var T = [['virksomhed', ['oprettet_at', 'id']], ['person', ['oprettet_at', 'id']], ['ansaettelse', ['id']], ['projekt', ['oprettet_at', 'id']], ['projekt_log', ['tidspunkt', 'id']],
       ['aktivitet', ['oprettet_at', 'id']], ['aktivitet_deltager', ['aktivitet_id', 'person_id']], ['aktivitet_projekt', ['aktivitet_id', 'projekt_id']],
-      ['opfoelgning', ['forfald', 'id']], ['virksomhed_typologi', ['virksomhed_id', 'typologi_id']], ['label', ['navn', 'id']], ['label_kobling', ['id']]];
+      ['opfoelgning', ['forfald', 'id']], ['virksomhed_typologi', ['virksomhed_id', 'typologi_id']], ['label', ['navn', 'id']], ['label_kobling', ['id']], ['vedhaeftning', ['oprettet_at', 'id']]];
     return Promise.all(T.map(function (t) { return fetchAll(t[0], t[1]); })).then(function (r) {
       var D = {}; T.forEach(function (t, i) { D[t[0]] = r[i]; });
       applyData(D);
@@ -1352,6 +1353,10 @@
         via: v.via_kollega_id ? [numOf('p', v.via_kollega_id)] : [],
         people: (dl[v.id] || []).map(function (d) { return numOf('p', d.person_id); }),
         proj: (ap[v.id] || []).map(function (d) { return numOf('j', d.projekt_id); }) });
+    });
+    (D.vedhaeftning || []).forEach(function (v) {
+      var o = v.aktivitet_id ? byId(acts, numOf('a', v.aktivitet_id)) : byId(projects, numOf('j', v.projekt_id)); if (!o) return;
+      (o.files = o.files || []).push({ id: v.id, navn: v.filnavn, sti: v.sti, str: v.stoerrelse, mime: v.mimetype || '', dato: (v.oprettet_at || '').slice(0, 10) });
     });
     D.opfoelgning.forEach(function (v) {
       followups.push({ id: numOf('o', v.id), tekst: v.tekst, forfald: v.forfald, person: numOf('p', v.person_id), act: numOf('a', v.aktivitet_id), proj: numOf('j', v.projekt_id), done: !!v.udfoert_at, doneAt: v.udfoert_at || null, varsel: v.varsel_dage || 0 });
@@ -1911,8 +1916,8 @@
   }
   function personDetail(p) { var h = personDetail0(p); return p ? withEdit(h, 'p', p.id) : h; }
   function firmDetail(f) { var h = firmDetail0(f); return f ? withEdit(h, 'f', f.id) : h; }
-  function actDetail(a) { var h = actDetail0(a); return a ? withEdit(h, 'a', a.id) : h; }
-  function projDetail(pr) { var h = projDetail0(pr); return pr ? withEdit(h, 'j', pr.id) : h; }
+  function actDetail(a) { var h = actDetail0(a); return a ? withEdit(h, 'a', a.id) + attachSection('a', a) : h; }
+  function projDetail(pr) { var h = projDetail0(pr); return pr ? withEdit(h, 'j', pr.id) + attachSection('j', pr) : h; }
 
   function openEdit(kind, id) {
     var h = '', title = '', o;
@@ -1926,7 +1931,7 @@
         edField('Antal medarbejdere', 'ed-medarb', o.medarb) + edAdr(o) + '</div>' + edArea('Noter', 'ed-note', o.note);
     } else if (kind === 'a') {
       o = byId(acts, id); title = 'Rediger aktivitet';
-      h = '<div class="fgrid">' + edField('Titel', 'ed-titel', o.titel) + edField('Dato', 'ed-dato', o.dato, 'date') + edSel('Type', 'ed-type', TYPER.map(function (t) { return [t, t]; }), o.type) + edField('Sted', 'ed-sted', o.sted) + '</div>' + edArea('Noter og intel', 'ed-note', o.note);
+      h = '<div class="fgrid">' + edField('Titel', 'ed-titel', o.titel) + edField('Dato', 'ed-dato', o.dato, 'date') + edSel('Type', 'ed-type', TYPER.map(function (t) { return [t, t]; }), o.type) + edField('Sted', 'ed-sted', o.sted) + '</div>' + edArea('Noter og intel', 'ed-note', o.note) + '<div id="ed-projs"></div>';
     } else if (kind === 'j') {
       o = byId(projects, id); title = 'Rediger ' + o.navn;
       h = '<div class="fgrid">' + edField('Projektnavn', 'ed-navn', o.navn) + edAdr(o) + '</div><p class="muted">Fase, start, honorar og bygherre ændres direkte i projektets stamdata.</p>';
@@ -1937,9 +1942,18 @@
         edField('Antal medarbejdere', 'ed-medarb', '') + edAdr(null) + '</div>' + edArea('Noter', 'ed-note', '');
     }
     ed = { kind: kind, id: id }; $('#ed-del').hidden = false;
+    if (kind === 'a') ed.proj = o.proj.slice();
     $('#ed-h').textContent = title; $('#ed-body').innerHTML = h + '<div class="err" id="ed-err" role="alert"></div>'; $('#ed').hidden = false;
+    if (kind === 'a') edProjUI();
     setTimeout(function () { var e = $('#ed-body input'); if (e) e.focus(); }, 20);
   }
+  function edProjUI() {
+    var box = $('#ed-projs'); if (!box) return;
+    var rest = projects.filter(function (p) { return ed.proj.indexOf(p.id) < 0; }).sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); });
+    box.innerHTML = '<h3>Nævnte projekter</h3><div class="chips">' + (ed.proj.length ? ed.proj.map(function (id) { var p = byId(projects, id); return p ? '<span class="chip">' + esc(p.navn) + '<button type="button" class="chipx" data-edrmproj="' + id + '" aria-label="Fjern ' + esc(p.navn) + '">×</button></span>' : ''; }).join('') : '<span class="muted">Ingen projekter nævnt.</span>') + '</div>' +
+      (rest.length ? '<div class="actions"><select id="ed-addproj" aria-label="Tilføj projekt"><option value="">Vælg projekt…</option>' + rest.map(function (p) { return '<option value="' + p.id + '">' + esc(p.navn) + '</option>'; }).join('') + '</select><button type="button" class="btn small" id="ed-addproj-go">Tilføj</button></div>' : '');
+  }
+
   function edAddr(o, locKey) {
     var vej = $('#ed-vej').value.trim(), post = $('#ed-post').value.trim(), by = $('#ed-by').value.trim();
     var a = o[locKey] || o[locKey + 'x'] || {};
@@ -1980,7 +1994,7 @@
       edAddr(o, 'adr'); if (v('ed-by')) o.by = v('ed-by');
     } else if (ed.kind === 'a') {
       o = byId(acts, ed.id); if (!v('ed-titel')) { err.textContent = 'Skriv en titel.'; return; } if (!v('ed-dato')) { err.textContent = 'Vælg en dato.'; return; }
-      o.titel = v('ed-titel'); o.dato = v('ed-dato'); o.type = $('#ed-type').value; o.sted = v('ed-sted'); o.note = v('ed-note');
+      o.titel = v('ed-titel'); o.dato = v('ed-dato'); o.type = $('#ed-type').value; o.sted = v('ed-sted'); o.note = v('ed-note'); o.proj = ed.proj.slice();
     } else if (ed.kind === 'j') {
       o = byId(projects, ed.id); if (!v('ed-navn')) { err.textContent = 'Skriv et projektnavn.'; return; }
       o.navn = v('ed-navn'); edAddr(o, 'loc');
@@ -1992,6 +2006,7 @@
     var kind = ed.kind, id = ed.id, name;
     if (kind === 'p') name = byId(persons, id).navn; else if (kind === 'f') name = byId(firms, id).navn; else if (kind === 'a') name = byId(acts, id).titel; else name = byId(projects, id).navn;
     if (!confirm('Slet "' + name + '"? Det kan ikke fortrydes.')) return;
+    if (kind === 'a') purgeFiles(byId(acts, id)); if (kind === 'j') purgeFiles(byId(projects, id));
     function without(arr, fn) { for (var i = arr.length - 1; i >= 0; i--) if (fn(arr[i])) arr.splice(i, 1); }
     if (kind === 'p') {
       without(persons, function (x) { return x.id === id; }); without(followups, function (x) { return x.person === id; });
@@ -2011,11 +2026,89 @@
   }
   document.addEventListener('click', function (e) {
     var t = e.target; if (!t || !t.closest) return;
+    var rb = t.closest('[data-edrmproj]'); if (rb && ed) { ed.proj = ed.proj.filter(function (x) { return x !== +rb.getAttribute('data-edrmproj'); }); edProjUI(); return; }
+    if (t.closest('#ed-addproj-go') && ed) { var sv = +$('#ed-addproj').value; if (sv && ed.proj.indexOf(sv) < 0) ed.proj.push(sv); edProjUI(); return; }
     var b = t.closest('[data-edit]'); if (b) { var p = b.getAttribute('data-edit').split(':'); openEdit(p[0], +p[1]); return; }
     if (t.closest('#np-f')) { openEdit('fnew', 0); var dl = $('#ed-del'); if (dl) dl.hidden = true; return; }
     if (t.closest('#ed-go')) { if (ed) saveEdit(); return; }
     if (t.closest('#ed-x')) { closeEdit(); return; }
     if (t.closest('#ed-del')) { if (ed) deleteRec(); return; }
+  });
+
+  /* ===================== Vedhæftninger (Supabase Storage) ===================== */
+  var BUCKET = 'vedhaeftninger', MAXB = 25 * 1024 * 1024, attTarget = null;
+  function fsize(n) { n = +n || 0; return n >= 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' kB'; }
+  function safeName(n) { return String(n || 'fil').replace(/æ/g, 'ae').replace(/Æ/g, 'Ae').replace(/ø/g, 'oe').replace(/Ø/g, 'Oe').replace(/å/g, 'aa').replace(/Å/g, 'Aa').normalize('NFKD').replace(/[^\w.\-]+/g, '_').replace(/^_+|_+$/g, '').slice(-80) || 'fil'; }
+  function attachSection(kind, o) {
+    var list = o.files || [];
+    return '<section><h3>Vedhæftninger</h3>' + (list.length ? '<ul class="filelist">' + list.map(function (f) {
+      return '<li><button type="button" class="link" data-fopen="' + kind + ':' + o.id + ':' + f.id + '">' + esc(f.navn) + '</button><span class="muted">' + fsize(f.str) + ' · ' + fmtDate(f.dato) + '</span><button type="button" class="btn small" data-fdel="' + kind + ':' + o.id + ':' + f.id + '">Slet</button></li>';
+    }).join('') + '</ul>' : '<p class="muted">Ingen vedhæftninger.</p>') +
+      '<div class="actions"><button type="button" class="btn small" data-fadd="' + kind + ':' + o.id + '">Tilføj fil</button><span class="muted" id="att-st-' + kind + o.id + '"></span></div><p class="muted">Op til 25 MB pr. fil. Filerne gemmes privat i din Supabase.</p></section>';
+  }
+  function attTarget_(kind, id) { return kind === 'a' ? byId(acts, id) : byId(projects, id); }
+  function settle() {
+    return new Promise(function (res, rej) {
+      schedule(0); var t0 = Date.now();
+      (function poll() { if (!pending && !syncBusy) return res(); if (Date.now() - t0 > 30000) return rej(new Error('Ændringerne er ikke gemt endnu. Prøv igen om lidt.')); setTimeout(poll, 150); })();
+    });
+  }
+  function attStatus(kind, id, txt) { var e = $('#att-st-' + kind + id); if (e) e.textContent = txt || ''; }
+  function uploadFiles(kind, id, files) {
+    var o = attTarget_(kind, id); if (!o || !files.length) return Promise.resolve();
+    var list = Array.prototype.slice.call(files), done = 0, bad = [];
+    attStatus(kind, id, 'Gemmer ændringer…');
+    return settle().then(function () {
+      var uid = ME.id, parent = uidOf(kind === 'a' ? 'a' : 'j', o.id), seq = Promise.resolve();
+      list.forEach(function (file) {
+        seq = seq.then(function () {
+          if (file.size > MAXB) { bad.push(file.name + ' er over 25 MB'); return; }
+          var fid = newUuid(), path = uid + '/' + (kind === 'a' ? 'aktivitet' : 'projekt') + '/' + parent + '/' + fid + '-' + safeName(file.name);
+          attStatus(kind, id, 'Uploader ' + file.name + '…');
+          return SB.storage.from(BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false }).then(function (r) {
+            if (r.error) throw r.error;
+            var row = { id: fid, filnavn: file.name, sti: path, stoerrelse: file.size, mimetype: file.type || null };
+            row[kind === 'a' ? 'aktivitet_id' : 'projekt_id'] = parent;
+            return SB.from('vedhaeftning').insert(row).then(function (r2) {
+              if (r2.error) { SB.storage.from(BUCKET).remove([path]); throw r2.error; }
+              (o.files = o.files || []).push({ id: fid, navn: file.name, sti: path, str: file.size, mime: file.type || '', dato: localISO(new Date()) });
+              done++;
+            });
+          }).catch(function (e) { bad.push(file.name + ': ' + ((e && e.message) || e)); });
+        });
+      });
+      return seq;
+    }).catch(function (e) { bad.push((e && e.message) || String(e)); }).then(function () {
+      renderAll();
+      toast(done ? done + (done === 1 ? ' fil er gemt' : ' filer er gemt') + (bad.length ? '. Fejl: ' + bad.join('; ') : '') : 'Ingen filer gemt. ' + bad.join('; '));
+    });
+  }
+  function openFile(kind, id, fid) {
+    var o = attTarget_(kind, id), f = o && (o.files || []).filter(function (x) { return x.id === fid; })[0]; if (!f) return;
+    var w = window.open('', '_blank');
+    SB.storage.from(BUCKET).createSignedUrl(f.sti, 120).then(function (r) {
+      if (r.error || !r.data) { if (w) w.close(); toast('Kunne ikke åbne filen: ' + (r.error && r.error.message)); return; }
+      if (w) w.location = r.data.signedUrl; else location.href = r.data.signedUrl;
+    });
+  }
+  function deleteFile(kind, id, fid) {
+    var o = attTarget_(kind, id), f = o && (o.files || []).filter(function (x) { return x.id === fid; })[0]; if (!f) return;
+    if (!confirm('Slet "' + f.navn + '"? Det kan ikke fortrydes.')) return;
+    SB.from('vedhaeftning').delete().eq('id', fid).then(function (r) {
+      if (r.error) { toast('Kunne ikke slette: ' + r.error.message); return; }
+      SB.storage.from(BUCKET).remove([f.sti]);
+      o.files = o.files.filter(function (x) { return x.id !== fid; }); renderAll(); toast('Filen er slettet');
+    });
+  }
+  function purgeFiles(o) { var p = (o.files || []).map(function (f) { return f.sti; }); if (p.length) SB.storage.from(BUCKET).remove(p); }
+  document.addEventListener('click', function (e) {
+    var t = e.target; if (!t || !t.closest) return;
+    var b = t.closest('[data-fadd]'); if (b) { var p = b.getAttribute('data-fadd').split(':'); attTarget = { kind: p[0], id: +p[1] }; var fi = $('#att-file'); fi.value = ''; fi.click(); return; }
+    b = t.closest('[data-fopen]'); if (b) { var q = b.getAttribute('data-fopen').split(':'); openFile(q[0], +q[1], q[2]); return; }
+    b = t.closest('[data-fdel]'); if (b) { var r = b.getAttribute('data-fdel').split(':'); deleteFile(r[0], +r[1], r[2]); return; }
+  });
+  document.addEventListener('change', function (e) {
+    var t = e.target; if (t && t.id === 'att-file' && t.files && t.files.length && attTarget) { var at = attTarget, fl = Array.prototype.slice.call(t.files); t.value = ''; uploadFiles(at.kind, at.id, fl); }
   });
 
   if (window.__KR_NOBOOT !== true) boot();

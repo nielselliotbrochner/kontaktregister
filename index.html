@@ -295,6 +295,11 @@ textarea { width: 100%; resize: vertical; }
 .edbar { margin-top: 6px; }
 .dlg textarea { width: 100%; font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
 .fgrid label.wide { grid-column: 1 / -1; }
+.filelist { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.filelist li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+.filelist li .muted { margin-left: auto; font-size: 12.5px; }
+.chipx { border: 0; background: none; cursor: pointer; font-size: 16px; line-height: 1; margin-left: 6px; color: var(--muted); }
+#ed-projs { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 #login { z-index: 3000; background: var(--bg); }
 </style>
 </head>
@@ -700,6 +705,7 @@ textarea { width: 100%; resize: vertical; }
     <div class="actions"><button type="button" class="btn primary" id="ed-go">Gem</button><button type="button" class="btn" id="ed-x">Annullér</button><button type="button" class="btn" id="ed-del" style="margin-left:auto;color:var(--err)">Slet</button></div>
   </div>
 </div>
+<input type="file" id="att-file" multiple hidden>
 <input type="file" id="imp-file" accept=".csv,.txt,.tsv,text/csv" hidden>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>

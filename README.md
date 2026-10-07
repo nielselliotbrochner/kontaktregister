@@ -46,6 +46,8 @@ delete from virksomhed;     -- fjerner også kerneområde-scores
 delete from label;          -- fjerner også mærker og invitationslister
 ```
 
+Vedhæftede filer fjernes ikke af dette. Slet dem i appen først, eller under Storage, bucket `vedhaeftninger`, i Supabase.
+
 ## 4. Importér rigtige data
 
 **Kontakter** (fanen Personer, knappen "Importér kontakter"): vælg en CSV-fil. Kolonner genkendes på navn, og du kan rette koblingen i dialogen, før du importerer. Kendte kolonnenavne: Fornavn, Efternavn eller Navn, Titel, E-mail, Telefon, Virksomhed (eller Firma), CVR, Adresse, Postnr, By, Hjemmeside, Type, Mærker, Noter. Skilletegn (semikolon, komma, tabulator) og tegnsæt (UTF-8 eller Excel) findes automatisk.
@@ -62,6 +64,7 @@ delete from label;          -- fjerner også mærker og invitationslister
 
 - Alle ændringer gemmes automatisk. Pillen øverst til højre viser "Gemt", "Gemmer…" eller en fejl. Ved fejl prøver appen igen, og ændringerne ligger i vinduet, indtil de er gemt. Luk ikke fanen, mens der står "Gemmer…" eller en fejl.
 - "Hent data igen" henter det nyeste fra databasen, fx efter ændringer fra en anden enhed.
+- Aktiviteter og projekter har sektionen Vedhæftninger nederst i detaljevisningen. Tilføj fil uploader til en privat mappe i Supabase Storage (op til 25 MB pr. fil, 1 GB samlet på gratis-planen). Tryk på filnavnet for at åbne den, og Slet for at fjerne den. Når du redigerer en aktivitet, kan du også tilføje og fjerne omtalte projekter.
 - Rediger og slet findes øverst i detaljevisningen for person, virksomhed, aktivitet og projekt. Sletning kan ikke fortrydes.
 - Appen kan installeres: i Chrome eller Edge via installationsikonet i adresselinjen, på iPhone via Del, Føj til hjemmeskærm.
 
