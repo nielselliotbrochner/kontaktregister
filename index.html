@@ -315,6 +315,7 @@ textarea { width: 100%; resize: vertical; }
       <div class="hbtns">
         <span id="sync" class="sync" data-s="busy" role="status" aria-live="polite">Starter…</span>
         <span id="me" class="muted"></span>
+        <button type="button" class="btn small" id="btn-lk" title="Redigér lister som aktivitetstyper, titler og roller">Opslagslister</button>
         <button type="button" class="btn small" id="btn-geo" title="Find kortkoordinater til importerede adresser">Find koordinater</button>
         <button type="button" class="btn small" id="btn-reload">Hent data igen</button>
         <button type="button" class="btn small" id="btn-logout">Log ud</button>
@@ -708,6 +709,15 @@ textarea { width: 100%; resize: vertical; }
     <h2 id="ed-h">Rediger</h2>
     <div id="ed-body"></div>
     <div class="actions"><button type="button" class="btn primary" id="ed-go">Gem</button><button type="button" class="btn" id="ed-x">Annullér</button><button type="button" class="btn" id="ed-del" style="margin-left:auto;color:var(--err)">Slet</button></div>
+  </div>
+</div>
+<div id="lk" class="ovl" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="lk-h">
+    <h2 id="lk-h">Opslagslister</h2>
+    <label>Liste<select id="lk-t"></select></label>
+    <div id="lk-body"></div>
+    <div class="fgrid"><label>Ny værdi<input type="text" id="lk-new" placeholder="Skriv navn"></label><div style="align-self:end"><button type="button" class="btn" id="lk-add">Tilføj</button></div></div>
+    <div class="actions"><button type="button" class="btn primary" id="lk-x">Luk</button></div>
   </div>
 </div>
 <input type="file" id="att-file" multiple hidden>

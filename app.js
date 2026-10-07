@@ -13,7 +13,7 @@
     tilbud: { n: 'Tilbud', c: '--ph-tilbud', p: 55 }, vundet: { n: 'Vundet', c: '--ph-vundet', p: 100 }, tabt: { n: 'Tabt', c: '--ph-tabt', p: 0 },
     fravalgt: { n: 'Fravalgt', c: '--ph-fra', p: 0 }
   };
-  var KAT = { bygherre: 'Bygherre', arkitekt: 'Arkitekt', entreprenoer: 'Entreprenør', raadgiver: 'Rådgiver', andet: 'Andet', egen: 'Egen virksomhed' };
+  var KAT = { bygherre: 'Bygherre', arkitekt: 'Arkitekt', entreprenoer: 'Entreprenør', raadgiver: 'Rådgiver', leverandoer: 'Leverandør', myndighed: 'Myndighed', andet: 'Andet', egen: 'Egen virksomhed' };
   var TYPER = ['Kaffemøde', 'Frokostmøde', 'Kundemøde', 'Reception', 'Konference', 'Netværksarrangement', 'Telefonsamtale', 'Andet'];
   var VARSEL = [[0, 'På dagen kl. 08:00'], [1, '1 dag før'], [7, '1 uge før']];
   var MND = ['januar', 'februar', 'marts', 'april', 'maj', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'december'];
@@ -31,7 +31,13 @@
   function slug(s) { return s.toLowerCase().replace(/æ/g, 'ae').replace(/ø/g, 'oe').replace(/å/g, 'aa').replace(/[^a-z ]/g, '').trim().split(/\s+/).join('.'); }
 
   // Ansættelser
-  function cur(p) { for (var i = 0; i < p.emp.length; i++) if (p.emp[i].til == null) return p.emp[i]; return null; }
+  function cur(p) {
+    var a = p.emp.filter(function (e) { return e.til == null; });
+    if (!a.length) return null;
+    for (var i = 0; i < a.length; i++) if (a[i].prim) return a[i];
+    for (var j = 0; j < a.length; j++) if (!a[j].typ || a[j].typ === 'employee') return a[j];
+    return a[0];
+  }
   function firmOf(p) { var c = cur(p); return c ? byId(firms, c.firm) : null; }
   function titelOf(p) { var c = cur(p); return c ? c.titel : ''; }
   function firmAt(p, dato) {
@@ -39,7 +45,7 @@
     for (var i = 0; i < p.emp.length; i++) { var e = p.emp[i]; if (e.fra <= m && (e.til == null || m < e.til)) return byId(firms, e.firm); }
     return firmOf(p);
   }
-  function isColleague(p) { var f = firmOf(p); return !!f && f.kat === 'egen'; }
+  function isColleague(p) { if (p._emp) return true; var f = firmOf(p); return !!f && f.kat === 'egen'; }
   function stale(p) { return !!cur(p) && monthsSince(p.bek) >= 18; }
   function firmPeople(fid) { return persons.filter(function (p) { var c = cur(p); return c && c.firm === fid; }); }
   function formerPeople(fid) { return persons.filter(function (p) { var c = cur(p); return (!c || c.firm !== fid) && p.emp.some(function (e) { return e.firm === fid; }); }); }
@@ -105,6 +111,8 @@
       '&subject=' + encodeURIComponent('Opfølgning: ' + f.tekst) + '&body=' + encodeURIComponent(calCtx(f)) +
       '&startdt=' + f.forfald + '&enddt=' + addDays(f.forfald, 1);
   }
+  function stBadge(a) { return a.status && a.status !== 'completed' && typeof lkName === 'function' ? '<span class="badge warn">' + esc(lkName('activity_status', a.status)) + '</span>' : ''; }
+  function ini(p) { return p.ini || ((p.fn || '').slice(0, 2) + (p.en || '').slice(0, 2)).toUpperCase(); }
   function fuItem(f, ctx) {
     var links = [];
     if (f.person) links.push(pname(f.person));
@@ -114,7 +122,7 @@
     return '<li class="fu' + (f.done ? ' done' : '') + (late ? ' late' : '') + '">' +
       '<input type="checkbox" id="fu-' + ctx + '-' + f.id + '" data-fudone="' + f.id + '"' + (f.done ? ' checked' : '') + ' aria-label="Markér som udført">' +
       '<div><label for="fu-' + ctx + '-' + f.id + '" class="tx">' + esc(f.tekst) + '</label>' +
-      '<div class="mt"><span class="due">Forfald ' + fmtDate(f.forfald) + (f.done ? '' : ' · ' + relDays(f.forfald)) + '</span> · Alarm ' + esc(varselText(f.varsel).toLowerCase()) + (alarmOn(f) ? ' · <span class="alr">alarm udløst</span>' : '') + (links.length ? '<br>' + links.join(' · ') : '') + '</div></div>' +
+      '<div class="mt"><span class="due">Forfald ' + fmtDate(f.forfald) + (f.done ? '' : ' · ' + relDays(f.forfald)) + '</span> · Alarm ' + esc(varselText(f.varsel).toLowerCase()) + (alarmOn(f) ? ' · <span class="alr">alarm udløst</span>' : '') + (links.length ? '<br>' + links.join(' · ') : '') + '<br><label class="muted">Ansvarlig <select data-furesp="' + f.id + '" aria-label="Ansvarlig"><option value="">Ingen</option>' + colleagues().map(function (q) { return '<option value="' + q.id + '"' + (f.resp === q.id ? ' selected' : '') + '>' + esc(q.navn) + '</option>'; }).join('') + '</select></label></div></div>' +
       (f.done ? '<span></span>' : '<span class="fuact"><button type="button" class="btn small" data-snooze="' + f.id + '">Udsæt 1 uge</button><a class="btn small" target="_blank" rel="noopener" title="Opret aftale i Outlook" href="' + esc(outlookUrl(f)) + '">Outlook</a></span>') + '</li>';
   }
   function varselOptions() { return VARSEL.map(function (v) { return '<option value="' + v[0] + '">' + v[1] + '</option>'; }).join(''); }
@@ -134,7 +142,7 @@
 
   // Personer
   // Kort: opfundne adresser og koordinater (virksomhedens adresse = kontaktpersonens arbejdssted)
-  var KCOL = { bygherre: '#BA1223', arkitekt: '#1F6E8C', entreprenoer: '#9A6200', raadgiver: '#5B5F97', andet: '#8A7B75', egen: '#3A3A3A' };
+  var KCOL = { bygherre: '#BA1223', arkitekt: '#1F6E8C', entreprenoer: '#9A6200', raadgiver: '#5B5F97', leverandoer: '#2E7D5B', myndighed: '#7A4B8C', andet: '#8A8A8A', egen: '#3A3A3A' };
   // Grov skitse af Danmark, vises som baggrund hvis kortfliserne ikke kan hentes
   var DK = [
     [[54.90, 8.67], [55.47, 8.40], [55.62, 8.13], [56.00, 8.12], [56.70, 8.21], [57.12, 8.60], [57.45, 9.00], [57.60, 9.95], [57.73, 10.60], [57.44, 10.54], [56.99, 10.31], [56.65, 10.50], [56.40, 10.92], [56.15, 10.22], [55.86, 9.85], [55.70, 9.54], [55.50, 9.48], [55.25, 9.52], [54.80, 9.45]],
@@ -641,7 +649,7 @@
     $('#list-p').innerHTML = list.length ? list.map(function (p) {
       var f = firmOf(p), lm = lastMet(p.id);
       return '<li><button type="button" class="item" data-go="p:' + p.id + '" aria-current="' + (sel.p === p.id) + '">' +
-        '<span class="t">' + esc(p.navn) + (isColleague(p) ? '<span class="badge">Kollega</span>' : '') + (stale(p) ? '<span class="badge warn">Bekræft job</span>' : '') + '</span><span class="d">' + (lm ? fmtDate(lm) : 'Ikke mødt') + '</span>' +
+        '<span class="t">' + esc(p.navn) + (isColleague(p) ? '<span class="badge">Kollega ' + esc(ini(p)) + '</span>' : '') + (stale(p) ? '<span class="badge warn">Bekræft job</span>' : '') + '</span><span class="d">' + (lm ? fmtDate(lm) : 'Ikke mødt') + '</span>' +
         '<span class="s">' + esc(titelOf(p)) + (f ? ' · ' + esc(f.navn) : '') + '</span></button></li>';
     }).join('') : '<li class="empty">Ingen personer matcher.</li>';
     $('#detail-p').innerHTML = personDetail(byId(persons, sel.p));
@@ -651,7 +659,7 @@
     if (!p.emp.length) return '<p class="muted">Ingen virksomhed registreret endnu.</p>';
     return '<ul class="elist">' + p.emp.slice().sort(function (a, b) { return a.fra < b.fra ? 1 : -1; }).map(function (e) {
       var f = byId(firms, e.firm);
-      return '<li><span>' + (f ? go('f', f.id) + esc(f.navn) + '</button>' : 'Ukendt virksomhed') + (e.titel ? ' · ' + esc(e.titel) : '') + (e.til == null ? '<span class="badge">Nuværende</span>' : '') + '</span>' +
+      return '<li><span>' + (f ? go('f', f.id) + esc(f.navn) + '</button>' : 'Ukendt virksomhed') + (e.titel ? ' · ' + esc(e.titel) : '') + (e.typ && e.typ !== 'employee' && typeof lkName === 'function' ? ' · ' + esc(lkName('affiliation_type', e.typ)) : '') + (e.fkt ? ' · ' + esc(e.fkt) : '') + (e.til == null ? '<span class="badge">Nuværende</span>' : '') + (cur(p) === e && p.emp.length > 1 ? '<span class="badge">Primær</span>' : '') + '</span>' +
         '<span class="per">' + fmtMonth(e.fra) + ' til ' + (e.til ? fmtMonth(e.til) : 'nu') + '</span></li>';
     }).join('') + '</ul>';
   }
@@ -675,7 +683,7 @@
     var projIds = uniq([].concat.apply([], as.map(function (a) { return a.proj; })));
     var cols = isColleague(p) ? [] : uniq([].concat.apply([], as.map(function (a) { return a.people; }))).filter(function (x) { var q = byId(persons, x); return q && isColleague(q); });
     var h = '<button type="button" class="btn back" data-back="p">‹ Tilbage til listen</button>';
-    h += '<div><h2>' + esc(p.navn) + (isColleague(p) ? '<span class="badge">Kollega</span>' : '') + '</h2><p class="muted">' + esc(titelOf(p)) + (f ? (titelOf(p) ? ' · ' : '') + go('f', f.id) + esc(f.navn) + '</button>' : 'Virksomhed ikke angivet') + '</p>' +
+    h += '<div><h2>' + esc(p.navn) + (isColleague(p) ? '<span class="badge">Kollega ' + esc(ini(p)) + '</span>' : '') + '</h2><p class="muted">' + esc(titelOf(p)) + (f ? (titelOf(p) ? ' · ' : '') + go('f', f.id) + esc(f.navn) + '</button>' : 'Virksomhed ikke angivet') + '</p>' +
       (p.tags.length ? '<div class="chips" style="margin-top:8px">' + p.tags.map(function (t) { return '<span class="chip">' + esc(t) + '</span>'; }).join('') + '</div>' : '') + '</div>';
     h += '<section><h3>Kontakt</h3><div class="kv">' +
       (f && f.adr ? '<span class="k">Arbejdssted</span><span class="v">' + esc(f.adr.vej) + ', ' + esc(f.adr.post) + ' ' + esc(f.adr.by) + '</span><button type="button" class="btn" data-map="' + f.id + '">Vis på kort</button>' : '') +
@@ -698,7 +706,7 @@
     var others = a.people.filter(function (x) { return !p || x !== p.id; }).map(pname);
     var then = '';
     if (p) { var f1 = firmAt(p, a.dato), f2 = firmOf(p); if (f1 && f2 && f1.id !== f2.id) then = '<span class="who">Dengang hos ' + esc(f1.navn) + '</span>'; }
-    var via = !a.me ? '<span class="badge">Via kollega</span>' : '';
+    var via = (!a.me ? '<span class="badge">Via kollega</span>' : '') + stBadge(a);
     return '<li><div class="hd"><span class="ty">' + esc(a.type) + '</span><span class="dt">' + fmtDate(a.dato) + '</span>' + go('a', a.id) + esc(a.titel) + '</button>' + via + '</div>' +
       '<span class="note">' + esc(a.note) + '</span>' + then + (others.length ? '<span class="who">Sammen med: ' + others.join(', ') + '</span>' : '') + '</li>';
   }
@@ -819,7 +827,7 @@
         lastKey = key;
       }
       var via = !a.me ? ' · via ' + a.via.map(function (id) { return esc(byId(persons, id).navn); }).join(', ') : '';
-      html += '<li><button type="button" class="item" data-go="a:' + a.id + '" aria-current="' + (sel.a === a.id) + '"><span class="t">' + esc(a.titel) + (!a.me ? '<span class="badge">Via kollega</span>' : '') + '</span><span class="d">' + fmtDate(a.dato) + '</span>' +
+      html += '<li><button type="button" class="item" data-go="a:' + a.id + '" aria-current="' + (sel.a === a.id) + '"><span class="t">' + esc(a.titel) + (!a.me ? '<span class="badge">Via kollega</span>' : '') + stBadge(a) + '</span><span class="d">' + fmtDate(a.dato) + '</span>' +
         '<span class="s">' + (g === 'type' ? '' : esc(a.type) + ' · ') + a.people.length + ' deltagere · ' + a.proj.length + ' projekter' + via + '</span></button></li>';
     });
     $('#list-a').innerHTML = html || '<li class="empty">Ingen aktiviteter matcher.</li>';
@@ -836,7 +844,7 @@
       groups[k].push(p);
     });
     var h = '<button type="button" class="btn back" data-back="a">‹ Tilbage til listen</button>';
-    h += '<div><h2>' + esc(a.titel) + '</h2><p class="muted">' + esc(a.type) + ' · ' + fmtDate(a.dato) + (a.sted ? ' · ' + esc(a.sted) : '') + '</p>' +
+    h += '<div><h2>' + esc(a.titel) + stBadge(a) + '</h2><p class="muted">' + esc(a.type) + ' · ' + fmtDate(a.dato) + (a.sted ? ' · ' + esc(a.sted) : '') + '</p>' +
       '<p style="margin-top:6px">' + (a.me ? 'Jeg var selv til stede.' : 'Jeg var ikke til stede. Registreret via kollega: ' + a.via.map(pname).join(', ') + '.') + '</p></div>';
     h += '<section><h3>Noter og intel</h3><p>' + (a.note ? esc(a.note) : '<span class="muted">Ingen noter.</span>') + '</p></section>';
     h += '<section><h3>Deltagere</h3><ul class="blist">' + order.map(function (k) {
@@ -1171,6 +1179,7 @@
       setProj(pr1, pbp[1], t.value); fillProjSelect(); renderAll(); var ag = document.getElementById(id1); if (ag) ag.focus({ preventScroll: true }); return;
     }
     if (t.matches && t.matches('[data-nej]')) { byId(persons, +t.getAttribute('data-nej')).nej = t.checked; renderAll(); toast(t.checked ? 'Fjernet fra alle invitationer' : 'Kan inviteres igen'); return; }
+    if (t.matches && t.matches('[data-furesp]')) { var fr = byId(followups, +t.getAttribute('data-furesp')); if (fr) { fr.resp = +t.value || 0; } return; }
     if (t.matches && t.matches('[data-fudone]')) {
       var f = byId(followups, +t.getAttribute('data-fudone')); f.done = t.checked; renderAll(); toast(f.done ? 'Markeret som udført' : 'Genåbnet'); return;
     }
@@ -1238,8 +1247,32 @@
   var SB = null, ME = null, lastRows = null, loadedAt = 0, syncBusy = false, syncTimer = null, syncFail = 0, pending = false, booted = false;
   var UU = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {} }, NN = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {} }, CNT = { f: 0, p: 0, j: 0, a: 0, o: 0, l: 0 };
   var TAGU = {};
-  var TYPE_DB = { 'Kaffemøde': 'kaffemoede', 'Frokostmøde': 'frokostmoede', 'Kundemøde': 'kundemoede', 'Reception': 'reception', 'Konference': 'konference', 'Netværksarrangement': 'netvaerksarrangement', 'Telefonsamtale': 'telefonsamtale', 'Andet': 'andet' };
-  var TYPE_UI = {}; Object.keys(TYPE_DB).forEach(function (k) { TYPE_UI[TYPE_DB[k]] = k; });
+
+  /* ---------- Opslagstabeller ---------- */
+  var LKT = ['company_category', 'developer_type', 'company_stage', 'project_stage', 'project_source', 'activity_type', 'activity_status', 'employee_title', 'contact_function', 'affiliation_type', 'participant_role'];
+  var LKX = { developer_type: { group_name: null, sector: null }, project_stage: { default_probability: 0, is_open: false }, participant_role: { kind: 'company' } };
+  var LK = {};
+  LKT.forEach(function (t) { LK[t] = []; });
+  function lkKey(r) { return r ? (r.code || r.name) : ''; }
+  function lkRow(t, id) { var a = LK[t] || []; for (var i = 0; i < a.length; i++) if (a[i].id === id) return a[i]; return null; }
+  function lkK(t, id) { return id ? lkKey(lkRow(t, id)) : ''; }
+  function lkByKey(t, key) { var a = LK[t] || []; for (var i = 0; i < a.length; i++) if (a[i].code === key) return a[i]; for (var j = 0; j < a.length; j++) if (a[j].name === key) return a[j]; return null; }
+  function lkId(t, key, create) {
+    if (key == null || key === '') return null;
+    var r = lkByKey(t, key); if (r) return r.id;
+    if (!create) return null;
+    var mx = 0; LK[t].forEach(function (x) { if (x.sort_order > mx && x.sort_order < 100) mx = x.sort_order; });
+    r = { id: newUuid(), code: null, name: String(key), sort_order: mx + 1, active: true, is_system: false };
+    var ex = LKX[t] || {}; Object.keys(ex).forEach(function (k) { r[k] = ex[k]; });
+    LK[t].push(r); return r.id;
+  }
+  function lkNames(t, onlyActive) { return LK[t].filter(function (r) { return !onlyActive || r.active; }).slice().sort(function (a, b) { return a.sort_order - b.sort_order || (a.name < b.name ? -1 : 1); }); }
+  function lkKeys(t, onlyActive) { return lkNames(t, onlyActive).map(lkKey); }
+  function lkName(t, key) { var r = lkByKey(t, key); return r ? r.name : (key || ''); }
+  function syncTyper() {
+    var names = lkNames('activity_type', true).map(function (r) { return r.name; });
+    if (typeof TYPER !== 'undefined' && names.length) { TYPER.length = 0; names.forEach(function (n) { TYPER.push(n); }); }
+  }
 
   function newUuid() {
     if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
@@ -1263,6 +1296,7 @@
   function nameParts(p) { if ((p.fn != null || p.en != null) && joinName(p.fn, p.mn, p.en) === p.navn) return { fn: p.fn || '', mn: p.mn || '', en: p.en || '' }; return parseName(p.navn); }
   function setName(p, fn, mn, en) { p.fn = String(fn || '').trim(); p.mn = String(mn || '').trim(); p.en = String(en || '').trim(); p.navn = joinName(p.fn, p.mn, p.en); }
   function localISO(d) { var z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 10); }
+  function initialsOf(p) { var n = nameParts(p), s = (n.fn.slice(0, 2) + n.en.slice(0, 2)).toUpperCase(); return s || 'XX'; }
 
   /* ---------- Status ---------- */
   function setStatus(kind, text) {
@@ -1286,13 +1320,14 @@
     return next();
   }
 
-  var LOGLBL = { fase: 'Fase', start_kvartal: 'Start', honorar: 'Honorar', anlaegssum: 'Anlægssum', rsm_nummer: 'RSM-nummer', bygherre_id: 'Bygherre', kilde: 'Kilde' };
+  var LOGLBL = { stage: 'Fase', construction_start_quarter: 'Start', own_value: 'Honorar', value: 'Anlægssum', rsm: 'RSM-nummer', developer_id: 'Bygherre', source: 'Kilde' };
 
   function loadAll() {
     setStatus('busy', 'Henter data…');
-    var T = [['virksomhed', ['oprettet_at', 'id']], ['person', ['oprettet_at', 'id']], ['ansaettelse', ['id']], ['projekt', ['oprettet_at', 'id']], ['projekt_log', ['tidspunkt', 'id']],
-      ['aktivitet', ['oprettet_at', 'id']], ['aktivitet_deltager', ['aktivitet_id', 'person_id']], ['aktivitet_projekt', ['aktivitet_id', 'projekt_id']],
-      ['opfoelgning', ['forfald', 'id']], ['virksomhed_typologi', ['virksomhed_id', 'typologi_id']], ['label', ['navn', 'id']], ['label_kobling', ['id']], ['vedhaeftning', ['oprettet_at', 'id']]];
+    var T = [['company', ['created_at', 'id']], ['employee', ['created_at', 'id']], ['contact', ['created_at', 'id']], ['contact_company', ['id']], ['project', ['created_at', 'id']], ['project_log', ['changed_at', 'id']],
+      ['roles', ['created_at', 'id']], ['activity', ['created_at', 'id']], ['activity_contact', ['activity_id', 'contact_id']], ['activity_employee', ['activity_id', 'employee_id']], ['activity_project', ['activity_id', 'project_id']],
+      ['followup', ['due_date', 'id']], ['company_typology', ['company_id', 'typology_id']], ['label', ['name', 'id']], ['label_link', ['id']], ['attachment', ['created_at', 'id']]];
+    LKT.forEach(function (t) { T.push([t, ['sort_order', 'id']]); });
     return Promise.all(T.map(function (t) { return fetchAll(t[0], t[1]); })).then(function (r) {
       var D = {}; T.forEach(function (t, i) { D[t[0]] = r[i]; });
       applyData(D);
@@ -1304,139 +1339,201 @@
     [firms, persons, projects, acts, followups, lists].forEach(function (a) { a.length = 0; });
     ['f', 'p', 'j', 'a', 'o', 'l'].forEach(function (k) { UU[k] = {}; NN[k] = {}; CNT[k] = 0; });
     TAGU = {};
-    D.virksomhed.forEach(function (v) {
-      var f = { id: numOf('f', v.id), navn: v.navn, kat: v.type, sub: v.underkategori || KAT[v.type] || '', by: v.by || '', cvr: v.cvr || '', medarb: v.antal_medarbejdere, web: v.web || '', note: v.noter || '', typ: {} };
-      if (v.lat != null && v.lng != null) f.adr = { vej: v.adresse || '', post: v.postnr || '', by: v.by || '', lat: v.lat, lng: v.lng };
-      else if (v.adresse || v.postnr) f.adrx = { vej: v.adresse || '', post: v.postnr || '', by: v.by || '' };
+    LKT.forEach(function (t) {
+      LK[t] = (D[t] || []).map(function (r) {
+        var o = { id: r.id, code: r.code || null, name: r.name, sort_order: r.sort_order, active: r.active !== false, is_system: !!r.is_system };
+        Object.keys(LKX[t] || {}).forEach(function (k) { o[k] = r[k] == null ? LKX[t][k] : r[k]; });
+        return o;
+      });
+    });
+    D.company.forEach(function (v) {
+      var kat = lkK('company_category', v.category_id);
+      var f = { id: numOf('f', v.id), navn: v.name, kat: kat, sub: v.subcategory || KAT[kat] || '', by: v.city || '', cvr: v.cvr || '', medarb: v.employee_count, web: v.web || '', note: v.notes || '', typ: {},
+        dev: lkK('developer_type', v.developer_type_id), stage: lkK('company_stage', v.stage_id), resp: v.responsible_id ? numOf('p', v.responsible_id) : 0, adr2: v.address2 || '', land: v.country || 'Danmark' };
+      if (v.lat != null && v.lng != null) f.adr = { vej: v.address1 || '', post: v.postal_code || '', by: v.city || '', lat: v.lat, lng: v.lng };
+      else if (v.address1 || v.postal_code) f.adrx = { vej: v.address1 || '', post: v.postal_code || '', by: v.city || '' };
       firms.push(f);
     });
-    D.virksomhed_typologi.forEach(function (t) { var f = byId(firms, numOf('f', t.virksomhed_id)); if (f) f.typ[t.typologi_id - 1] = t.score; });
+    D.company_typology.forEach(function (t) { var f = byId(firms, numOf('f', t.company_id)); if (f) f.typ[t.typology_id - 1] = t.score; });
+    var own = null; firms.forEach(function (f) { if (!own && f.kat === 'egen') own = f; });
     var emps = {};
-    D.ansaettelse.forEach(function (e) { (emps[e.person_id] = emps[e.person_id] || []).push(e); });
+    D.contact_company.forEach(function (e) { (emps[e.contact_id] = emps[e.contact_id] || []).push(e); });
     var tagOf = {}, listOf = {};
     D.label.forEach(function (l) {
-      if (l.er_invitationsliste) { var li = { id: numOf('l', l.id), navn: l.navn, beskr: l.beskrivelse || '', members: [] }; lists.push(li); listOf[l.id] = li; }
-      else { TAGU[l.navn] = l.id; tagOf[l.id] = l.navn; }
+      if (l.is_invitation_list) { var li = { id: numOf('l', l.id), navn: l.name, beskr: l.description || '', members: [] }; lists.push(li); listOf[l.id] = li; }
+      else { TAGU[l.name] = l.id; tagOf[l.id] = l.name; }
     });
-    D.person.forEach(function (v) {
-      var p = { id: numOf('p', v.id), navn: joinName(v.fornavn, v.mellemnavn, v.efternavn), fn: v.fornavn || '', mn: v.mellemnavn || '', en: v.efternavn || '', tags: [], bek: (v.bekendt_siden || v.oprettet_at || '').slice(0, 7) || TODAY.slice(0, 7), emp: [], nej: !!v.ikke_invitation };
-      if (v.email) p.email = v.email; if (v.telefon) p.tel = v.telefon; if (v.linkedin) p.li = v.linkedin; if (v.noter) p.note = v.noter;
-      var es = (emps[v.id] || []).slice().sort(function (a, b) { return (a.fra_dato || '') < (b.fra_dato || '') ? -1 : 1; });
-      es.forEach(function (e) { p.emp.push({ firm: numOf('f', e.virksomhed_id), titel: e.titel || '', fra: e.fra_dato ? e.fra_dato.slice(0, 7) : '', til: e.til_dato ? e.til_dato.slice(0, 7) : null, _id: e.id }); });
-      if (!p.emp.length && v.virksomhed_id) p.emp.push({ firm: numOf('f', v.virksomhed_id), titel: v.titel || '', fra: p.bek, til: null, _id: newUuid() });
+    D.contact.forEach(function (v) {
+      var p = { id: numOf('p', v.id), navn: joinName(v.first_name, v.middle_name, v.last_name), fn: v.first_name || '', mn: v.middle_name || '', en: v.last_name || '', tags: [], bek: (v.acquainted_since || v.created_at || '').slice(0, 7) || TODAY.slice(0, 7), emp: [], nej: !!v.no_invitation, act: v.active !== false };
+      if (v.email) p.email = v.email; if (v.phone) p.tel = v.phone; if (v.linkedin) p.li = v.linkedin; if (v.notes) p.note = v.notes;
+      var es = (emps[v.id] || []).slice().sort(function (a, b) { return (a.from_date || '') < (b.from_date || '') ? -1 : 1; });
+      es.forEach(function (e) { p.emp.push({ firm: numOf('f', e.company_id), titel: e.title || '', fra: e.from_date ? e.from_date.slice(0, 7) : '', til: e.to_date ? e.to_date.slice(0, 7) : null, _id: e.id, typ: lkK('affiliation_type', e.affiliation_type_id) || 'employee', fkt: lkK('contact_function', e.function_id), prim: !!e.is_primary }); });
       persons.push(p);
     });
-    D.label_kobling.forEach(function (k) {
-      if (!k.person_id) return;
-      var p = byId(persons, numOf('p', k.person_id)); if (!p) return;
+    D.employee.forEach(function (v) {
+      var tn = lkK('employee_title', v.title_id), bek = (v.created_at || '').slice(0, 7) || TODAY.slice(0, 7);
+      var p = { id: numOf('p', v.id), navn: joinName(v.first_name, v.middle_name, v.last_name), fn: v.first_name || '', mn: v.middle_name || '', en: v.last_name || '', tags: [], bek: bek, nej: false, act: v.active !== false, _emp: true, ini: v.initials || '', etitel: tn,
+        emp: own ? [{ firm: own.id, titel: tn, fra: bek, til: null, _id: 'emp-' + v.id, typ: 'employee', fkt: '', prim: true }] : [] };
+      if (v.email) p.email = v.email; if (v.phone) p.tel = v.phone; if (v.notes) p.note = v.notes;
+      persons.push(p);
+    });
+    D.label_link.forEach(function (k) {
+      if (!k.contact_id) return;
+      var p = byId(persons, numOf('p', k.contact_id)); if (!p) return;
       if (listOf[k.label_id]) listOf[k.label_id].members.push(p.id);
       else if (tagOf[k.label_id]) p.tags.push(tagOf[k.label_id]);
     });
-    var logs = {};
-    D.projekt_log.forEach(function (g) { (logs[g.projekt_id] = logs[g.projekt_id] || []).push(g); });
-    D.projekt.forEach(function (v) {
-      var pr = { id: numOf('j', v.id), navn: v.navn, bygherre: numOf('f', v.bygherre_id), fase: v.fase, honorar: v.honorar == null ? null : +v.honorar, begr: v.begrundelse || '', rm: v.rsm_nummer || '', kilde: v.kilde, start: v.start_kvartal || '', anlaeg: v.anlaegssum == null ? null : +v.anlaegssum, bygherreNavn: v.bygherre_navn || '', log: [] };
-      if (v.lat != null && v.lng != null) pr.loc = { vej: v.adresse || '', post: v.postnr || '', by: v.by || '', lat: v.lat, lng: v.lng };
-      else if (v.adresse || v.postnr) pr.locx = { vej: v.adresse || '', post: v.postnr || '', by: v.by || '' };
+    var logs = {}, rl = {};
+    D.project_log.forEach(function (g) { (logs[g.project_id] = logs[g.project_id] || []).push(g); });
+    D.roles.forEach(function (g) { if (g.project_id) (rl[g.project_id] = rl[g.project_id] || []).push(g); });
+    D.project.forEach(function (v) {
+      var pr = { id: numOf('j', v.id), navn: v.title, bygherre: 0, fase: lkK('project_stage', v.stage_id), honorar: v.own_value == null ? null : +v.own_value, begr: v.rationale || '', rm: v.rsm || '', kilde: lkK('project_source', v.source_id), start: v.construction_start_quarter || '', anlaeg: v.value == null ? null : +v.value, bygherreNavn: v.developer_name || '', log: [], roles: [], _bid: null };
+      (rl[v.id] || []).forEach(function (g) {
+        var rk = lkK('participant_role', g.role_id);
+        if (rk === 'client' && g.company_id && !pr._bid) { pr.bygherre = numOf('f', g.company_id); pr._bid = g.id; return; }
+        pr.roles.push({ id: g.id, firm: g.company_id ? numOf('f', g.company_id) : 0, contact: g.contact_id ? numOf('p', g.contact_id) : 0, role: rk, win: !!g.is_winner, note: g.notes || '' });
+      });
+      if (v.lat != null && v.lng != null) pr.loc = { vej: v.address1 || '', post: v.postal_code || '', by: v.city || '', lat: v.lat, lng: v.lng };
+      else if (v.address1 || v.postal_code) pr.locx = { vej: v.address1 || '', post: v.postal_code || '', by: v.city || '' };
       (logs[v.id] || []).slice().reverse().forEach(function (g) {
-        var dato = localISO(new Date(g.tidspunkt)), tekst;
-        if (g.felt === 'oprettet') tekst = 'Oprettet fra ' + (KILDE[g.ny_vaerdi] || g.ny_vaerdi);
-        else if (g.felt === 'begrundelse') return;
+        var dato = localISO(new Date(g.changed_at)), tekst;
+        if (g.field === 'created') tekst = 'Oprettet fra ' + (KILDE[g.new_value] || g.new_value);
+        else if (g.field === 'rationale') return;
         else {
           var sh = function (x) {
             if (x == null || x === '') return 'ikke sat';
-            if (g.felt === 'fase') return PH[x] ? PH[x].n : x;
-            if (g.felt === 'kilde') return KILDE[x] || x;
-            if (g.felt === 'bygherre_id') { var f = byId(firms, numOf('f', x)); return f ? f.navn : 'ikke registreret'; }
-            if (g.felt === 'honorar' || g.felt === 'anlaegssum') return String(parseFloat(x)).replace('.', ',');
+            if (g.field === 'stage') return PH[x] ? PH[x].n : x;
+            if (g.field === 'source') return KILDE[x] || x;
+            if (g.field === 'developer_id') { var f = byId(firms, numOf('f', x)); return f ? f.navn : 'ikke registreret'; }
+            if (g.field === 'own_value' || g.field === 'value') return String(parseFloat(x)).replace('.', ',');
             return String(x);
           };
-          tekst = (LOGLBL[g.felt] || g.felt) + ': ' + sh(g.gammel_vaerdi) + ' til ' + sh(g.ny_vaerdi);
+          tekst = (LOGLBL[g.field] || g.field) + ': ' + sh(g.old_value) + ' til ' + sh(g.new_value);
         }
         pr.log.push({ dato: dato, tekst: tekst });
       });
       projects.push(pr);
     });
-    var dl = {}, ap = {};
-    D.aktivitet_deltager.forEach(function (d) { (dl[d.aktivitet_id] = dl[d.aktivitet_id] || []).push(d); });
-    D.aktivitet_projekt.forEach(function (d) { (ap[d.aktivitet_id] = ap[d.aktivitet_id] || []).push(d); });
-    D.aktivitet.forEach(function (v) {
-      acts.push({ id: numOf('a', v.id), type: TYPE_UI[v.type] || 'Andet', dato: v.dato, titel: v.titel, sted: v.sted || '', note: v.noter || '', me: v.jeg_deltog !== false,
-        via: v.via_kollega_id ? [numOf('p', v.via_kollega_id)] : [],
-        people: (dl[v.id] || []).map(function (d) { return numOf('p', d.person_id); }),
-        proj: (ap[v.id] || []).map(function (d) { return numOf('j', d.projekt_id); }),
-        pn: (ap[v.id] || []).reduce(function (o, d) { if (d.intel) o[numOf('j', d.projekt_id)] = d.intel; return o; }, {}) });
+    var dl = {}, ap = {}, de = {};
+    D.activity_contact.forEach(function (d) { (dl[d.activity_id] = dl[d.activity_id] || []).push(d.contact_id); });
+    D.activity_employee.forEach(function (d) { (dl[d.activity_id] = dl[d.activity_id] || []).push(d.employee_id); });
+    D.activity_project.forEach(function (d) { (ap[d.activity_id] = ap[d.activity_id] || []).push(d); });
+    D.activity.forEach(function (v) {
+      acts.push({ id: numOf('a', v.id), type: lkName('activity_type', lkK('activity_type', v.type_id)) || 'Andet', status: lkK('activity_status', v.status_id) || 'completed', dato: v.date, titel: v.title, sted: v.place || '', note: v.notes || '', me: v.attended !== false,
+        via: v.via_employee_id ? [numOf('p', v.via_employee_id)] : [],
+        people: (dl[v.id] || []).map(function (u) { return numOf('p', u); }),
+        proj: (ap[v.id] || []).map(function (d) { return numOf('j', d.project_id); }),
+        pn: (ap[v.id] || []).reduce(function (o, d) { if (d.intel) o[numOf('j', d.project_id)] = d.intel; return o; }, {}) });
     });
-    (D.vedhaeftning || []).forEach(function (v) {
-      var o = v.aktivitet_id ? byId(acts, numOf('a', v.aktivitet_id)) : byId(projects, numOf('j', v.projekt_id)); if (!o) return;
-      (o.files = o.files || []).push({ id: v.id, navn: v.filnavn, sti: v.sti, str: v.stoerrelse, mime: v.mimetype || '', dato: (v.oprettet_at || '').slice(0, 10) });
+    (D.attachment || []).forEach(function (v) {
+      var o = v.activity_id ? byId(acts, numOf('a', v.activity_id)) : byId(projects, numOf('j', v.project_id)); if (!o) return;
+      (o.files = o.files || []).push({ id: v.id, navn: v.file_name, sti: v.path, str: v.size, mime: v.mime_type || '', dato: (v.created_at || '').slice(0, 10) });
     });
-    D.opfoelgning.forEach(function (v) {
-      followups.push({ id: numOf('o', v.id), tekst: v.tekst, forfald: v.forfald, person: numOf('p', v.person_id), act: numOf('a', v.aktivitet_id), proj: numOf('j', v.projekt_id), done: !!v.udfoert_at, doneAt: v.udfoert_at || null, varsel: v.varsel_dage || 0 });
+    D.followup.forEach(function (v) {
+      followups.push({ id: numOf('o', v.id), tekst: v.task, forfald: v.due_date, person: v.contact_id ? numOf('p', v.contact_id) : 0, resp: v.employee_id ? numOf('p', v.employee_id) : 0, act: numOf('a', v.activity_id), proj: numOf('j', v.project_id), done: !!v.done_at, doneAt: v.done_at || null, varsel: v.warning_days || 0 });
     });
+    syncTyper();
     lastRows = toRows();
+    // sikr at forventet primær-markering svarer til databasen (unikt indeks)
+    D.contact_company.forEach(function (e) { if (lastRows.contact_company[e.id]) lastRows.contact_company[e.id].is_primary = !!e.is_primary; });
   }
 
   /* ---------- Model til rækker ---------- */
   function toRows() {
-    var R = { virksomhed: {}, person: {}, ansaettelse: {}, projekt: {}, aktivitet: {}, label: {}, aktivitet_deltager: {}, aktivitet_projekt: {}, opfoelgning: {}, virksomhed_typologi: {}, label_kobling: {} };
+    var R = { employee: {}, company: {}, contact: {}, contact_company: {}, project: {}, roles: {}, activity: {}, activity_contact: {}, activity_employee: {}, activity_project: {}, followup: {}, company_typology: {}, label: {}, label_link: {} };
+    LKT.forEach(function (t) { R[t] = {}; });
     firms.forEach(function (f) {
       var a = f.adr || f.adrx || null, id = uidOf('f', f.id);
-      R.virksomhed[id] = { id: id, navn: f.navn, type: f.kat, cvr: qd(f.cvr), underkategori: qd(f.sub), antal_medarbejdere: f.medarb == null || f.medarb === '' || isNaN(+f.medarb) ? null : Math.round(+f.medarb), web: qd(f.web),
-        adresse: a ? qd(a.vej) : null, postnr: a ? qd(a.post) : null, by: a ? qd(a.by) : qd(f.by), lat: f.adr ? f.adr.lat : null, lng: f.adr ? f.adr.lng : null, noter: qd(f.note) };
+      R.company[id] = { id: id, name: f.navn, category_id: lkId('company_category', f.kat) || lkId('company_category', 'andet'), cvr: qd(f.cvr), subcategory: qd(f.sub), employee_count: f.medarb == null || f.medarb === '' || isNaN(+f.medarb) ? null : Math.round(+f.medarb), web: qd(f.web),
+        address1: a ? qd(a.vej) : null, postal_code: a ? qd(a.post) : null, city: a ? qd(a.by) : qd(f.by), lat: f.adr ? f.adr.lat : null, lng: f.adr ? f.adr.lng : null, notes: qd(f.note),
+        address2: qd(f.adr2), country: f.land || 'Danmark', developer_type_id: f.dev ? lkId('developer_type', f.dev) : null, stage_id: f.stage ? lkId('company_stage', f.stage) : null, responsible_id: null };
       Object.keys(f.typ || {}).forEach(function (k) {
         var s = f.typ[k];
-        if (s >= 1 && s <= 5) R.virksomhed_typologi[id + '|' + (+k + 1)] = { virksomhed_id: id, typologi_id: +k + 1, score: s };
+        if (s >= 1 && s <= 5) R.company_typology[id + '|' + (+k + 1)] = { company_id: id, typology_id: +k + 1, score: s };
       });
     });
     var tagIds = {};
     persons.forEach(function (p) {
       var id = uidOf('p', p.id), c = cur(p), nm = nameParts(p);
-      R.person[id] = { id: id, virksomhed_id: c ? uidOf('f', c.firm) : null, fornavn: nm.fn, mellemnavn: qd(nm.mn), efternavn: qd(nm.en), titel: c ? qd(c.titel) : null, email: qd(p.email), telefon: qd(p.tel), linkedin: qd(p.li),
-        er_kollega: isColleague(p), noter: qd(p.note), bekendt_siden: dm(p.bek), ikke_invitation: !!p.nej };
+      if (isColleague(p)) {
+        var tt = c ? c.titel : (p.etitel || '');
+        R.employee[id] = { id: id, first_name: nm.fn, middle_name: qd(nm.mn), last_name: qd(nm.en), initials: qd(p.ini) || initialsOf(p), title_id: qd(tt) ? lkId('employee_title', tt, true) : null, user_id: null, email: qd(p.email), phone: qd(p.tel), notes: qd(p.note), active: p.act !== false };
+        return;
+      }
+      R.contact[id] = { id: id, first_name: nm.fn, middle_name: qd(nm.mn), last_name: qd(nm.en), email: qd(p.email), phone: qd(p.tel), linkedin: qd(p.li), notes: qd(p.note), acquainted_since: dm(p.bek), no_invitation: !!p.nej, active: p.act !== false };
       p.emp.forEach(function (e) {
         if (!e.firm) return;
         if (!e._id) e._id = newUuid();
-        R.ansaettelse[e._id] = { id: e._id, person_id: id, virksomhed_id: uidOf('f', e.firm), titel: qd(e.titel), fra_dato: dm(e.fra), til_dato: dm(e.til) };
+        R.contact_company[e._id] = { id: e._id, contact_id: id, company_id: uidOf('f', e.firm), title: qd(e.titel), from_date: dm(e.fra), to_date: dm(e.til),
+          affiliation_type_id: lkId('affiliation_type', e.typ || 'employee', true), function_id: e.fkt ? lkId('contact_function', e.fkt, true) : null, is_primary: e === c };
       });
       (p.tags || []).forEach(function (t) {
         t = String(t).trim(); if (!t) return;
         if (!TAGU[t]) TAGU[t] = newUuid();
         tagIds[t] = TAGU[t];
-        R.label_kobling[TAGU[t] + '|' + id] = { label_id: TAGU[t], person_id: id };
+        R.label_link[TAGU[t] + '|' + id] = { label_id: TAGU[t], contact_id: id };
       });
     });
-    Object.keys(tagIds).forEach(function (t) { R.label[tagIds[t]] = { id: tagIds[t], navn: t, er_invitationsliste: false, beskrivelse: null }; });
+    firms.forEach(function (f) { var u = f.resp ? uidOf('p', f.resp) : null; if (u && R.employee[u]) R.company[uidOf('f', f.id)].responsible_id = u; });
+    Object.keys(tagIds).forEach(function (t) { R.label[tagIds[t]] = { id: tagIds[t], name: t, is_invitation_list: false, description: null }; });
     lists.forEach(function (l) {
       var id = uidOf('l', l.id);
-      R.label[id] = { id: id, navn: l.navn, er_invitationsliste: true, beskrivelse: qd(l.beskr) };
-      l.members.forEach(function (m) { var pu = uidOf('p', m); if (pu && R.person[pu]) R.label_kobling[id + '|' + pu] = { label_id: id, person_id: pu }; });
+      R.label[id] = { id: id, name: l.navn, is_invitation_list: true, description: qd(l.beskr) };
+      l.members.forEach(function (m) { var pu = uidOf('p', m); if (pu && R.contact[pu]) R.label_link[id + '|' + pu] = { label_id: id, contact_id: pu }; });
     });
+    var clientRole = lkId('participant_role', 'client');
     projects.forEach(function (pr) {
       var id = uidOf('j', pr.id), a = pr.loc || pr.locx || null;
-      R.projekt[id] = { id: id, rsm_nummer: qd(pr.rm), navn: pr.navn, bygherre_id: pr.bygherre ? uidOf('f', pr.bygherre) : null, bygherre_navn: qd(pr.bygherreNavn), fase: pr.fase,
-        honorar: pr.honorar == null ? null : pr.honorar, anlaegssum: pr.anlaeg == null ? null : pr.anlaeg, start_kvartal: qd(pr.start), kilde: pr.kilde, begrundelse: qd(pr.begr),
-        adresse: a ? qd(a.vej) : null, postnr: a ? qd(a.post) : null, by: a ? qd(a.by) : null, lat: pr.loc ? pr.loc.lat : null, lng: pr.loc ? pr.loc.lng : null };
+      R.project[id] = { id: id, rsm: qd(pr.rm), title: pr.navn, developer_name: qd(pr.bygherreNavn), stage_id: lkId('project_stage', pr.fase), source_id: lkId('project_source', pr.kilde),
+        own_value: pr.honorar == null ? null : pr.honorar, value: pr.anlaeg == null ? null : pr.anlaeg, construction_start_quarter: qd(pr.start), rationale: qd(pr.begr),
+        address1: a ? qd(a.vej) : null, postal_code: a ? qd(a.post) : null, city: a ? qd(a.by) : null, lat: pr.loc ? pr.loc.lat : null, lng: pr.loc ? pr.loc.lng : null };
+      var cu = pr.bygherre ? uidOf('f', pr.bygherre) : null;
+      if (cu && R.company[cu]) {
+        if (!pr._bid) pr._bid = newUuid();
+        R.roles[pr._bid] = { id: pr._bid, company_id: cu, contact_id: null, project_id: id, role_id: clientRole, is_winner: false, notes: null };
+      }
+      (pr.roles || []).forEach(function (r) {
+        var fu = r.firm ? uidOf('f', r.firm) : null, ku = r.contact ? uidOf('p', r.contact) : null;
+        if (fu && !R.company[fu]) fu = null; if (ku && !R.contact[ku]) ku = null;
+        if (!fu && !ku) return;
+        if (!r.id) r.id = newUuid();
+        R.roles[r.id] = { id: r.id, company_id: fu, contact_id: ku, project_id: id, role_id: lkId('participant_role', r.role, true), is_winner: !!r.win, notes: qd(r.note) };
+      });
     });
     acts.forEach(function (a) {
       var id = uidOf('a', a.id), via = a.via && a.via.length ? uidOf('p', a.via[0]) : null;
-      R.aktivitet[id] = { id: id, dato: a.dato, type: TYPE_DB[a.type] || 'andet', titel: a.titel, noter: qd(a.note), sted: qd(a.sted), jeg_deltog: !!a.me, via_kollega_id: via && R.person[via] ? via : null };
-      a.people.forEach(function (pid) { var pu = uidOf('p', pid); if (pu && R.person[pu]) R.aktivitet_deltager[id + '|' + pu] = { aktivitet_id: id, person_id: pu }; });
-      a.proj.forEach(function (jid) { var ju = uidOf('j', jid); if (ju && R.projekt[ju]) R.aktivitet_projekt[id + '|' + ju] = { aktivitet_id: id, projekt_id: ju, intel: qd((a.pn || {})[jid]) }; });
+      R.activity[id] = { id: id, date: a.dato, title: a.titel, notes: qd(a.note), place: qd(a.sted), attended: !!a.me, type_id: lkId('activity_type', a.type, true) || lkId('activity_type', 'andet'),
+        status_id: lkId('activity_status', a.status || (a.dato > TODAY ? 'planned' : 'completed')), via_employee_id: via && R.employee[via] ? via : null };
+      a.people.forEach(function (pid) {
+        var pu = uidOf('p', pid); if (!pu) return;
+        if (R.employee[pu]) R.activity_employee[id + '|' + pu] = { activity_id: id, employee_id: pu };
+        else if (R.contact[pu]) R.activity_contact[id + '|' + pu] = { activity_id: id, contact_id: pu, was_present: true };
+      });
+      a.proj.forEach(function (jid) { var ju = uidOf('j', jid); if (ju && R.project[ju]) R.activity_project[id + '|' + ju] = { activity_id: id, project_id: ju, intel: qd((a.pn || {})[jid]) }; });
     });
     followups.forEach(function (f) {
-      var id = uidOf('o', f.id);
+      var id = uidOf('o', f.id), pu = f.person ? uidOf('p', f.person) : null, ru = f.resp ? uidOf('p', f.resp) : null;
       if (f.done && !f.doneAt) f.doneAt = new Date().toISOString();
       if (!f.done) f.doneAt = null;
-      R.opfoelgning[id] = { id: id, person_id: f.person ? uidOf('p', f.person) : null, aktivitet_id: f.act ? uidOf('a', f.act) : null, projekt_id: f.proj ? uidOf('j', f.proj) : null,
-        forfald: f.forfald, varsel_dage: f.varsel || 0, tekst: f.tekst, udfoert_at: f.done ? f.doneAt : null };
+      if (pu && R.employee[pu]) { if (!ru) ru = pu; pu = null; }
+      if (pu && !R.contact[pu]) pu = null;
+      if (ru && !R.employee[ru]) ru = null;
+      R.followup[id] = { id: id, contact_id: pu, activity_id: f.act ? uidOf('a', f.act) : null, project_id: f.proj ? uidOf('j', f.proj) : null, employee_id: ru,
+        due_date: f.forfald, warning_days: f.varsel || 0, task: f.tekst, done_at: f.done ? f.doneAt : null };
+    });
+    LKT.forEach(function (t) {
+      LK[t].forEach(function (r) {
+        var o = { id: r.id, code: r.code, name: r.name, sort_order: r.sort_order, active: r.active, is_system: r.is_system };
+        Object.keys(LKX[t] || {}).forEach(function (k) { o[k] = r[k]; });
+        R[t][r.id] = o;
+      });
     });
     return R;
   }
 
   /* ---------- Diff og skrivning ---------- */
-  var ORDER = ['virksomhed', 'person', 'ansaettelse', 'projekt', 'aktivitet', 'label', 'aktivitet_deltager', 'aktivitet_projekt', 'opfoelgning', 'virksomhed_typologi', 'label_kobling'];
-  var PKS = { aktivitet_deltager: ['aktivitet_id', 'person_id'], aktivitet_projekt: ['aktivitet_id', 'projekt_id'], virksomhed_typologi: ['virksomhed_id', 'typologi_id'], label_kobling: ['label_id', 'person_id'] };
+  var ORDER = LKT.concat(['employee', 'company', 'contact', 'contact_company', 'project', 'roles', 'activity', 'activity_contact', 'activity_employee', 'activity_project', 'followup', 'company_typology', 'label', 'label_link']);
+  var PKS = { activity_contact: ['activity_id', 'contact_id'], activity_employee: ['activity_id', 'employee_id'], activity_project: ['activity_id', 'project_id'], company_typology: ['company_id', 'typology_id'], label_link: ['label_id', 'contact_id'] };
 
   function diff(oldR, newR) {
     var ins = [], upd = [], del = [];
@@ -1459,7 +1556,23 @@
   function applyDiff(d) {
     var seq = Promise.resolve();
     function chain(fn) { seq = seq.then(fn); }
-    // indsæt i FK-rækkefølge, i bidder
+    function delRow(x) {
+      chain(function () {
+        var q = SB.from(x.t).delete();
+        if (PKS[x.t]) PKS[x.t].forEach(function (c) { q = q.eq(c, x.row[c]); }); else q = q.eq('id', x.row.id);
+        return q.then(chk).then(function () { delete lastRows[x.t][x.k]; });
+      });
+    }
+    function updRow(x) {
+      chain(function () {
+        var q = SB.from(x.t).update(x.cols);
+        if (PKS[x.t]) PKS[x.t].forEach(function (c) { q = q.eq(c, x.row[c]); }); else q = q.eq('id', x.row.id);
+        return q.then(chk).then(function () { lastRows[x.t][x.k] = x.row; });
+      });
+    }
+    // tilknytninger har unikt indeks på primær: slet først, nedgradér derefter, indsæt, opgradér til sidst
+    d.del.filter(function (x) { return x.t === 'contact_company'; }).forEach(delRow);
+    d.upd.filter(function (x) { return x.t === 'contact_company' && x.cols.is_primary === false; }).forEach(updRow);
     ORDER.forEach(function (t) {
       var rows = d.ins.filter(function (x) { return x.t === t; });
       for (var i = 0; i < rows.length; i += 200) (function (part) {
@@ -1467,22 +1580,9 @@
           return SB.from(t).insert(part.map(function (x) { return x.row; })).then(chk).then(function () { part.forEach(function (x) { lastRows[t][x.k] = x.row; }); });
         });
       })(rows.slice(i, i + 200));
-      d.upd.filter(function (x) { return x.t === t; }).forEach(function (x) {
-        chain(function () {
-          var q = SB.from(t).update(x.cols);
-          if (PKS[t]) PKS[t].forEach(function (c) { q = q.eq(c, x.row[c]); }); else q = q.eq('id', x.row.id);
-          return q.then(chk).then(function () { lastRows[t][x.k] = x.row; });
-        });
-      });
+      d.upd.filter(function (x) { return x.t === t && !(t === 'contact_company' && x.cols.is_primary === false); }).forEach(updRow);
     });
-    // slet i omvendt rækkefølge
-    d.del.forEach(function (x) {
-      chain(function () {
-        var q = SB.from(x.t).delete();
-        if (PKS[x.t]) PKS[x.t].forEach(function (c) { q = q.eq(c, x.row[c]); }); else q = q.eq('id', x.row.id);
-        return q.then(chk).then(function () { delete lastRows[x.t][x.k]; });
-      });
-    });
+    d.del.filter(function (x) { return x.t !== 'contact_company'; }).forEach(delRow);
     return seq;
   }
 
@@ -1524,10 +1624,10 @@
   }
   function hideLogin() { $('#login').hidden = true; }
   function ensureBruger(user) {
-    return SB.from('bruger').select('id').eq('id', user.id).then(function (r) {
+    return SB.from('app_user').select('id').eq('id', user.id).then(function (r) {
       if (r.error) throw r.error;
       if (r.data && r.data.length) return;
-      return SB.from('bruger').insert({ id: user.id, navn: (user.email || 'Bruger').split('@')[0], email: user.email }).then(chk);
+      return SB.from('app_user').insert({ id: user.id, name: (user.email || 'Bruger').split('@')[0], email: user.email }).then(chk);
     });
   }
   function startSession(user) {
@@ -1925,6 +2025,11 @@
   function edField(label, id, val, type) { return '<label for="' + id + '">' + esc(label) + '<input type="' + (type || 'text') + '" id="' + id + '" value="' + esc(val == null ? '' : val) + '"></label>'; }
   function edArea(label, id, val) { return '<label for="' + id + '" class="wide">' + esc(label) + '<textarea id="' + id + '" rows="4">' + esc(val == null ? '' : val) + '</textarea></label>'; }
   function edSel(label, id, opts, val) { return '<label for="' + id + '">' + esc(label) + '<select id="' + id + '">' + optList(opts, val) + '</select></label>'; }
+  function lkOpts(t, cur, blank) {
+    var l = lkNames(t, true).map(function (x) { return [lkKey(x), x.name]; });
+    if (cur && !l.some(function (x) { return x[0] === cur; })) l.push([cur, lkName(t, cur)]);
+    return (blank != null ? [['', blank]] : []).concat(l);
+  }
   function edAdr(o) { var a = (o && (o.adr || o.loc || o.adrx || o.locx)) || {}; return edField('Adresse', 'ed-vej', a.vej) + edField('Postnr.', 'ed-post', a.post) + edField('By', 'ed-by', a.by); }
   function withEdit(html, kind, id) {
     return html.replace('</button>', '</button><div class="actions edbar"><button type="button" class="btn small" data-edit="' + kind + ':' + id + '">Rediger</button></div>');
@@ -1932,36 +2037,90 @@
   function personDetail(p) { var h = personDetail0(p); return p ? withEdit(h, 'p', p.id) : h; }
   function firmDetail(f) { var h = firmDetail0(f); return f ? withEdit(h, 'f', f.id) : h; }
   function actDetail(a) { var h = actDetail0(a); return a ? withEdit(h, 'a', a.id) + attachSection('a', a) : h; }
-  function projDetail(pr) { var h = projDetail0(pr); return pr ? withEdit(h, 'j', pr.id) + attachSection('j', pr) : h; }
+  function rolesSection(pr) {
+    var rs = pr.roles || []; if (!rs.length) return '';
+    return '<h3>Roller på projektet</h3><ul class="elist">' + rs.map(function (x) {
+      var f = x.firm ? byId(firms, x.firm) : null, k = x.contact ? byId(persons, x.contact) : null;
+      return '<li><span><b>' + esc(lkName('participant_role', x.role)) + '</b>' + (f ? ' · ' + go('f', f.id) + esc(f.navn) + '</button>' : '') + (k ? ' · ' + go('p', k.id) + esc(k.navn) + '</button>' : '') + (x.win ? '<span class="badge">Vinder</span>' : '') + (x.note ? ' · ' + esc(x.note) : '') + '</span></li>';
+    }).join('') + '</ul>';
+  }
+  function projDetail(pr) { var h = projDetail0(pr); return pr ? withEdit(h, 'j', pr.id) + rolesSection(pr) + attachSection('j', pr) : h; }
 
   function openEdit(kind, id) {
     var h = '', title = '', o;
     if (kind === 'p') {
       o = byId(persons, id); var c = cur(o); title = 'Rediger ' + o.navn;
       var nmp = nameParts(o);
-      h = '<div class="fgrid">' + edField('Fornavn', 'ed-fn', nmp.fn) + edField('Mellemnavn (valgfrit)', 'ed-mn', nmp.mn) + edField('Efternavn', 'ed-en', nmp.en) + (c ? edField('Titel', 'ed-titel', c.titel) : '') + edField('E-mail', 'ed-email', o.email, 'email') + edField('Telefon', 'ed-tel', o.tel, 'tel') +
-        edField('LinkedIn', 'ed-li', o.li) + edField('Mærker, adskilt med komma', 'ed-tags', (o.tags || []).join(', ')) + '</div>' + edArea('Noter', 'ed-note', o.note);
+      h = '<div class="fgrid">' + edField('Fornavn', 'ed-fn', nmp.fn) + edField('Mellemnavn (valgfrit)', 'ed-mn', nmp.mn) + edField('Efternavn', 'ed-en', nmp.en) + (isColleague(o) ? edSel('Titel', 'ed-etitel', lkOpts('employee_title', c ? c.titel : o.etitel, 'Ingen titel'), c ? c.titel : (o.etitel || '')) + edField('Initialer', 'ed-ini', o.ini || initialsOf(o)) : '') + edField('E-mail', 'ed-email', o.email, 'email') + edField('Telefon', 'ed-tel', o.tel, 'tel') +
+        edField('LinkedIn', 'ed-li', o.li) + edField('Mærker, adskilt med komma', 'ed-tags', (o.tags || []).join(', ')) + '</div>' + edArea('Noter', 'ed-note', o.note) + (isColleague(o) ? '' : '<div id="ed-emps"></div>');
     } else if (kind === 'f') {
       o = byId(firms, id); title = 'Rediger ' + o.navn;
       h = '<div class="fgrid">' + edField('Navn', 'ed-navn', o.navn) + edSel('Type', 'ed-kat', Object.keys(KAT).map(function (k) { return [k, KAT[k]]; }), o.kat) + edField('CVR', 'ed-cvr', o.cvr) + edField('Hjemmeside', 'ed-web', o.web) +
-        edField('Antal medarbejdere', 'ed-medarb', o.medarb) + edAdr(o) + '</div>' + edArea('Noter', 'ed-note', o.note);
+        edField('Antal medarbejdere', 'ed-medarb', o.medarb) + edAdr(o) + edSel('Bygherretype', 'ed-dev', lkOpts('developer_type', o.dev, 'Ikke angivet'), o.dev) + edSel('Modenhed', 'ed-stage', lkOpts('company_stage', o.stage, 'Ikke angivet'), o.stage) + edSel('Ansvarlig hos os', 'ed-resp', [['', 'Ingen']].concat(colleagues().map(function (q) { return [q.id, q.navn]; })), o.resp || '') + '</div>' + edArea('Noter', 'ed-note', o.note);
     } else if (kind === 'a') {
       o = byId(acts, id); title = 'Rediger aktivitet';
-      h = '<div class="fgrid">' + edField('Titel', 'ed-titel', o.titel) + edField('Dato', 'ed-dato', o.dato, 'date') + edSel('Type', 'ed-type', TYPER.map(function (t) { return [t, t]; }), o.type) + edField('Sted', 'ed-sted', o.sted) + '</div>' + edArea('Noter og intel', 'ed-note', o.note) + '<div id="ed-projs"></div>';
+      h = '<div class="fgrid">' + edField('Titel', 'ed-titel', o.titel) + edField('Dato', 'ed-dato', o.dato, 'date') + edSel('Type', 'ed-type', (TYPER.indexOf(o.type) < 0 ? [o.type] : []).concat(TYPER).map(function (t) { return [t, t]; }), o.type) + edField('Sted', 'ed-sted', o.sted) + edSel('Status', 'ed-status', lkOpts('activity_status', o.status), o.status || (o.dato > TODAY ? 'planned' : 'completed')) + '</div>' + edArea('Noter og intel', 'ed-note', o.note) + '<div id="ed-projs"></div>';
     } else if (kind === 'j') {
       o = byId(projects, id); title = 'Rediger ' + o.navn;
-      h = '<div class="fgrid">' + edField('Projektnavn', 'ed-navn', o.navn) + edAdr(o) + '</div><p class="muted">Fase, start, honorar og bygherre ændres direkte i projektets stamdata.</p>';
+      h = '<div class="fgrid">' + edField('Projektnavn', 'ed-navn', o.navn) + edAdr(o) + '</div><p class="muted">Fase, start, honorar og bygherre ændres direkte i projektets stamdata.</p><div id="ed-roles"></div>';
     }
     if (kind === 'fnew') {
       title = 'Ny virksomhed';
       h = '<div class="fgrid">' + edField('Navn', 'ed-navn', '') + edSel('Type', 'ed-kat', Object.keys(KAT).filter(function (k) { return k !== 'egen'; }).map(function (k) { return [k, KAT[k]]; }), 'bygherre') + edField('CVR', 'ed-cvr', '') + edField('Hjemmeside', 'ed-web', '') +
-        edField('Antal medarbejdere', 'ed-medarb', '') + edAdr(null) + '</div>' + edArea('Noter', 'ed-note', '');
+        edField('Antal medarbejdere', 'ed-medarb', '') + edAdr(null) + edSel('Bygherretype', 'ed-dev', lkOpts('developer_type', '', 'Ikke angivet'), '') + edSel('Modenhed', 'ed-stage', lkOpts('company_stage', '', 'Ikke angivet'), '') + edSel('Ansvarlig hos os', 'ed-resp', [['', 'Ingen']].concat(colleagues().map(function (q) { return [q.id, q.navn]; })), '') + '</div>' + edArea('Noter', 'ed-note', '');
     }
     ed = { kind: kind, id: id }; $('#ed-del').hidden = false;
+    if (kind === 'p' && !isColleague(o)) { ed.emps = o.emp.map(function (e) { return { firm: e.firm, titel: e.titel, fra: e.fra, til: e.til, typ: e.typ || 'employee', fkt: e.fkt || '', _id: e._id }; }); var pc = cur(o); ed.prim = pc ? o.emp.indexOf(pc) : -1; }
+    if (kind === 'j') ed.roles = (o.roles || []).map(function (x) { return { id: x.id, firm: x.firm, contact: x.contact, role: x.role, win: x.win, note: x.note }; });
     if (kind === 'a') { ed.proj = o.proj.slice(); ed.pn = {}; Object.keys(o.pn || {}).forEach(function (k) { ed.pn[k] = o.pn[k]; }); }
     $('#ed-h').textContent = title; $('#ed-body').innerHTML = h + '<div class="err" id="ed-err" role="alert"></div>'; $('#ed').hidden = false;
     if (kind === 'a') edProjUI();
+    if (ed.emps) edEmpUI();
+    if (ed.roles) edRoleUI();
     setTimeout(function () { var e = $('#ed-body input'); if (e) e.focus(); }, 20);
+  }
+  function edSync() {
+    var b = $('#ed-body'); if (!b || !ed) return;
+    if (ed.emps) b.querySelectorAll('[data-eri]').forEach(function (row) {
+      var e = ed.emps[+row.getAttribute('data-eri')]; if (!e) return;
+      e.firm = +row.querySelector('[data-ef]').value || 0; e.typ = row.querySelector('[data-et]').value; e.titel = row.querySelector('[data-eti]').value.trim(); e.fkt = row.querySelector('[data-efk]').value;
+      e.fra = row.querySelector('[data-efr]').value; e.til = row.querySelector('[data-etl]').value || null;
+    });
+    if (ed.emps) { var pr = b.querySelector('input[name="ed-prim"]:checked'); if (pr) ed.prim = +pr.value; }
+    if (ed.roles) b.querySelectorAll('[data-rri]').forEach(function (row) {
+      var x = ed.roles[+row.getAttribute('data-rri')]; if (!x) return;
+      x.firm = +row.querySelector('[data-rf]').value || 0; x.contact = +row.querySelector('[data-rc]').value || 0; x.role = row.querySelector('[data-rr]').value; x.win = row.querySelector('[data-rw]').checked; x.note = row.querySelector('[data-rn]').value.trim();
+    });
+  }
+  function edEmpUI() {
+    var box = $('#ed-emps'); if (!box) return; edSync();
+    var fo = firms.slice().sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); }).map(function (f) { return [f.id, f.navn]; });
+    box.innerHTML = '<h3>Tilknytninger</h3>' + (ed.emps.length ? '' : '<p class="muted">Ingen tilknytninger endnu.</p>') + ed.emps.map(function (e, i) {
+      return '<div class="fgrid empr" data-eri="' + i + '" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px">' +
+        '<label>Virksomhed<select data-ef>' + optList(fo, e.firm) + '</select></label>' +
+        '<label>Type<select data-et>' + optList(lkOpts('affiliation_type', e.typ), e.typ) + '</select></label>' +
+        '<label>Titel<input type="text" data-eti value="' + esc(e.titel) + '"></label>' +
+        '<label>Funktion<select data-efk>' + optList(lkOpts('contact_function', e.fkt, 'Ikke angivet'), e.fkt) + '</select></label>' +
+        '<label>Fra (måned)<input type="month" data-efr value="' + esc(e.fra || '') + '"></label>' +
+        '<label>Til (tom = nu)<input type="month" data-etl value="' + esc(e.til || '') + '"></label>' +
+        '<label style="flex-direction:row;align-items:center;gap:6px"><input type="radio" name="ed-prim" value="' + i + '"' + (ed.prim === i ? ' checked' : '') + '> Primær</label>' +
+        '<div><button type="button" class="btn small" data-edrmemp="' + i + '">Fjern tilknytning</button></div></div>';
+    }).join('') + '<div class="actions"><button type="button" class="btn small" id="ed-addemp">Tilføj tilknytning</button></div>';
+  }
+  function edRoleUI() {
+    var box = $('#ed-roles'); if (!box) return; edSync();
+    var fo = [[0, 'Ingen virksomhed']].concat(firms.slice().sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); }).map(function (f) { return [f.id, f.navn]; }));
+    var co = [[0, 'Ingen kontakt']].concat(persons.filter(function (q) { return !isColleague(q); }).sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); }).map(function (q) { return [q.id, q.navn]; }));
+    box.innerHTML = '<h3>Roller på projektet</h3><p class="muted">Bygherre ændres i projektets stamdata. Her registreres øvrige parter, konkurrenter og kontaktroller. Markér vinderen på et tabt eller vundet tilbud.</p>' +
+      ed.roles.map(function (x, i) {
+        return '<div class="fgrid" data-rri="' + i + '" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px">' +
+          '<label>Rolle<select data-rr>' + optList(lkOpts('participant_role', x.role).filter(function (o2) { return o2[0] !== 'client'; }), x.role) + '</select></label>' +
+          '<label>Virksomhed<select data-rf>' + optList(fo, x.firm) + '</select></label>' +
+          '<label>Kontakt<select data-rc>' + optList(co, x.contact) + '</select></label>' +
+          '<label>Note<input type="text" data-rn value="' + esc(x.note || '') + '"></label>' +
+          '<label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" data-rw' + (x.win ? ' checked' : '') + '> Vinder</label>' +
+          '<div><button type="button" class="btn small" data-edrmrole="' + i + '">Fjern rolle</button></div></div>';
+      }).join('') + '<div class="actions"><button type="button" class="btn small" id="ed-addrole">Tilføj rolle</button></div>';
   }
   function edProjUI() {
     var box = $('#ed-projs'); if (!box) return;
@@ -1989,6 +2148,7 @@
       var kt = $('#ed-kat').value;
       var nfm = { id: nextId(firms), navn: nn, kat: kt, sub: KAT[kt] || '', by: v('ed-by'), cvr: v('ed-cvr'), medarb: md ? parseInt(md.replace(/\./g, ''), 10) : null, web: v('ed-web').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, ''), note: v('ed-note'), typ: {} };
       if (v('ed-vej') || v('ed-post') || v('ed-by')) nfm.adrx = { vej: v('ed-vej'), post: v('ed-post'), by: v('ed-by') };
+      nfm.dev = $('#ed-dev').value; nfm.stage = $('#ed-stage').value; nfm.resp = +$('#ed-resp').value || 0;
       firms.push(nfm); sel.f = nfm.id; open.f = true;
       closeEdit(); setupForm(); renderAll(); showTab('f'); toast(nn + ' er tilføjet. Gemmer…'); schedule(100); return;
     }
@@ -1996,7 +2156,13 @@
       o = byId(persons, ed.id); var nfn = v('ed-fn').replace(/\s+/g, ' '), em = v('ed-email');
       if (!nfn) { err.textContent = 'Skriv et fornavn.'; return; }
       if (em && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { err.textContent = 'E-mailadressen ser ikke rigtig ud.'; return; }
-      setName(o, nfn, v('ed-mn').replace(/\s+/g, ' '), v('ed-en').replace(/\s+/g, ' ')); var c = cur(o); if (c && $('#ed-titel')) c.titel = v('ed-titel');
+      setName(o, nfn, v('ed-mn').replace(/\s+/g, ' '), v('ed-en').replace(/\s+/g, ' ')); var c = cur(o);
+      if (isColleague(o)) { var et = $('#ed-etitel').value; o.etitel = et; if (c) c.titel = et; o.ini = v('ed-ini').toUpperCase() || initialsOf(o); }
+      else if (ed.emps) {
+        edSync();
+        for (var q = 0; q < ed.emps.length; q++) { var ee = ed.emps[q]; if (!ee.firm) { err.textContent = 'Vælg virksomhed på alle tilknytninger, eller fjern dem.'; return; } if (ee.til && ee.fra && ee.til < ee.fra) { err.textContent = 'Slutmåned ligger før startmåned på en tilknytning.'; return; } }
+        o.emp = ed.emps.map(function (ee, qi) { var x = { firm: ee.firm, titel: ee.titel, fra: ee.fra || o.bek, til: ee.til || null, typ: ee.typ || 'employee', fkt: ee.fkt || '', prim: qi === ed.prim }; if (ee._id) x._id = ee._id; return x; });
+      }
       if (em) o.email = em; else delete o.email;
       if (v('ed-tel')) o.tel = v('ed-tel'); else delete o.tel;
       if (v('ed-li')) o.li = v('ed-li'); else delete o.li;
@@ -2008,13 +2174,15 @@
       var nk = $('#ed-kat').value; if (nk !== o.kat) { if (o.sub === KAT[o.kat]) o.sub = KAT[nk]; o.kat = nk; }
       o.navn = fn; o.cvr = v('ed-cvr'); o.web = v('ed-web').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, ''); o.note = v('ed-note');
       o.medarb = med ? parseInt(med.replace(/\./g, ''), 10) : null;
+      o.dev = $('#ed-dev').value; o.stage = $('#ed-stage').value; o.resp = +$('#ed-resp').value || 0;
       edAddr(o, 'adr'); if (v('ed-by')) o.by = v('ed-by');
     } else if (ed.kind === 'a') {
       o = byId(acts, ed.id); if (!v('ed-titel')) { err.textContent = 'Skriv en titel.'; return; } if (!v('ed-dato')) { err.textContent = 'Vælg en dato.'; return; }
-      o.titel = v('ed-titel'); o.dato = v('ed-dato'); o.type = $('#ed-type').value; o.sted = v('ed-sted'); o.note = v('ed-note'); o.proj = ed.proj.slice(); o.pn = pnClean((function () { var s = {}; Object.keys(ed.pn).forEach(function (k) { s[k] = ed.pn[k]; }); var e = document.querySelectorAll('[data-edjn]'); for (var q = 0; q < e.length; q++) s[e[q].getAttribute('data-edjn')] = e[q].value; return s; })(), o.proj);
+      o.titel = v('ed-titel'); o.dato = v('ed-dato'); o.type = $('#ed-type').value; o.sted = v('ed-sted'); o.status = $('#ed-status').value; o.note = v('ed-note'); o.proj = ed.proj.slice(); o.pn = pnClean((function () { var s = {}; Object.keys(ed.pn).forEach(function (k) { s[k] = ed.pn[k]; }); var e = document.querySelectorAll('[data-edjn]'); for (var q = 0; q < e.length; q++) s[e[q].getAttribute('data-edjn')] = e[q].value; return s; })(), o.proj);
     } else if (ed.kind === 'j') {
       o = byId(projects, ed.id); if (!v('ed-navn')) { err.textContent = 'Skriv et projektnavn.'; return; }
       o.navn = v('ed-navn'); edAddr(o, 'loc');
+      edSync(); o.roles = ed.roles.filter(function (x) { return x.firm || x.contact; }).map(function (x) { var y = { firm: x.firm, contact: x.contact, role: x.role, win: !!x.win, note: x.note }; if (x.id) y.id = x.id; return y; });
     }
     closeEdit(); fillProjSelect(); renderAll(); toast('Rettelsen er gemt lokalt. Gemmer…'); schedule(100);
   }
@@ -2026,12 +2194,14 @@
     if (kind === 'a') purgeFiles(byId(acts, id)); if (kind === 'j') purgeFiles(byId(projects, id));
     function without(arr, fn) { for (var i = arr.length - 1; i >= 0; i--) if (fn(arr[i])) arr.splice(i, 1); }
     if (kind === 'p') {
-      without(persons, function (x) { return x.id === id; }); without(followups, function (x) { return x.person === id; });
+      without(persons, function (x) { return x.id === id; }); without(followups, function (x) { return x.person === id; }); followups.forEach(function (x) { if (x.resp === id) x.resp = 0; });
+      firms.forEach(function (x) { if (x.resp === id) x.resp = 0; }); projects.forEach(function (pr) { pr.roles = (pr.roles || []).filter(function (x) { return x.contact !== id || x.firm; }); (pr.roles || []).forEach(function (x) { if (x.contact === id) x.contact = 0; }); });
       acts.forEach(function (a) { a.people = a.people.filter(function (x) { return x !== id; }); a.via = a.via.filter(function (x) { return x !== id; }); });
       lists.forEach(function (l) { l.members = l.members.filter(function (x) { return x !== id; }); });
     } else if (kind === 'f') {
       var fo = byId(firms, id);
       persons.forEach(function (p) { p.emp = p.emp.filter(function (e) { return e.firm !== id; }); });
+      projects.forEach(function (pr) { pr.roles = (pr.roles || []).filter(function (x) { return x.firm !== id || x.contact; }); (pr.roles || []).forEach(function (x) { if (x.firm === id) x.firm = 0; }); });
       projects.forEach(function (pr) { if (pr.bygherre === id) { pr.bygherre = 0; pr.bygherreNavn = pr.bygherreNavn || fo.navn; } });
       without(firms, function (x) { return x.id === id; });
     } else if (kind === 'a') {
@@ -2045,6 +2215,10 @@
     var t = e.target; if (!t || !t.closest) return;
     var rb = t.closest('[data-edrmproj]'); if (rb && ed) { ed.proj = ed.proj.filter(function (x) { return x !== +rb.getAttribute('data-edrmproj'); }); edProjUI(); return; }
     if (t.closest('#ed-addproj-go') && ed) { var sv = +$('#ed-addproj').value; if (sv && ed.proj.indexOf(sv) < 0) ed.proj.push(sv); edProjUI(); return; }
+    var rme = t.closest('[data-edrmemp]'); if (rme && ed && ed.emps) { edSync(); var ri = +rme.getAttribute('data-edrmemp'); ed.emps.splice(ri, 1); if (ed.prim === ri) ed.prim = -1; else if (ed.prim > ri) ed.prim--; edEmpUI(); return; }
+    if (t.closest('#ed-addemp') && ed && ed.emps) { edSync(); ed.emps.push({ firm: firms.length ? firms[0].id : 0, titel: '', fra: TODAY.slice(0, 7), til: null, typ: 'employee', fkt: '' }); edEmpUI(); return; }
+    var rmr = t.closest('[data-edrmrole]'); if (rmr && ed && ed.roles) { edSync(); ed.roles.splice(+rmr.getAttribute('data-edrmrole'), 1); edRoleUI(); return; }
+    if (t.closest('#ed-addrole') && ed && ed.roles) { edSync(); var rk = lkKeys('participant_role', true).filter(function (k) { return k !== 'client'; })[0] || 'competitor'; ed.roles.push({ firm: 0, contact: 0, role: rk, win: false, note: '' }); edRoleUI(); return; }
     var b = t.closest('[data-edit]'); if (b) { var p = b.getAttribute('data-edit').split(':'); openEdit(p[0], +p[1]); return; }
     if (t.closest('#np-f')) { openEdit('fnew', 0); var dl = $('#ed-del'); if (dl) dl.hidden = true; return; }
     if (t.closest('#ed-go')) { if (ed) saveEdit(); return; }
@@ -2084,9 +2258,9 @@
           attStatus(kind, id, 'Uploader ' + file.name + '…');
           return SB.storage.from(BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false }).then(function (r) {
             if (r.error) throw r.error;
-            var row = { id: fid, filnavn: file.name, sti: path, stoerrelse: file.size, mimetype: file.type || null };
-            row[kind === 'a' ? 'aktivitet_id' : 'projekt_id'] = parent;
-            return SB.from('vedhaeftning').insert(row).then(function (r2) {
+            var row = { id: fid, file_name: file.name, path: path, size: file.size, mime_type: file.type || null };
+            row[kind === 'a' ? 'activity_id' : 'project_id'] = parent;
+            return SB.from('attachment').insert(row).then(function (r2) {
               if (r2.error) { SB.storage.from(BUCKET).remove([path]); throw r2.error; }
               (o.files = o.files || []).push({ id: fid, navn: file.name, sti: path, str: file.size, mime: file.type || '', dato: localISO(new Date()) });
               done++;
@@ -2111,7 +2285,7 @@
   function deleteFile(kind, id, fid) {
     var o = attTarget_(kind, id), f = o && (o.files || []).filter(function (x) { return x.id === fid; })[0]; if (!f) return;
     if (!confirm('Slet "' + f.navn + '"? Det kan ikke fortrydes.')) return;
-    SB.from('vedhaeftning').delete().eq('id', fid).then(function (r) {
+    SB.from('attachment').delete().eq('id', fid).then(function (r) {
       if (r.error) { toast('Kunne ikke slette: ' + r.error.message); return; }
       SB.storage.from(BUCKET).remove([f.sti]);
       o.files = o.files.filter(function (x) { return x.id !== fid; }); renderAll(); toast('Filen er slettet');
@@ -2128,6 +2302,87 @@
     var t = e.target; if (t && t.id === 'att-file' && t.files && t.files.length && attTarget) { var at = attTarget, fl = Array.prototype.slice.call(t.files); t.value = ''; uploadFiles(at.kind, at.id, fl); }
   });
 
+
+  /* ===================== Opslagslister ===================== */
+  var LKE = [['activity_type', 'Aktivitetstyper'], ['employee_title', 'Medarbejdertitler'], ['contact_function', 'Kontaktfunktioner'], ['affiliation_type', 'Tilknytningstyper'], ['participant_role', 'Roller på projekter'], ['developer_type', 'Bygherretyper']];
+  var lkCur = 'activity_type';
+  function lkUsage(t, row) {
+    var key = lkKey(row), n = 0;
+    if (t === 'activity_type') acts.forEach(function (a) { if (a.type === row.name) n++; });
+    else if (t === 'employee_title') persons.forEach(function (p) { if (isColleague(p) && ((cur(p) ? cur(p).titel : p.etitel) === row.name)) n++; });
+    else if (t === 'contact_function') persons.forEach(function (p) { p.emp.forEach(function (e) { if (e.fkt === key) n++; }); });
+    else if (t === 'affiliation_type') persons.forEach(function (p) { p.emp.forEach(function (e) { if ((e.typ || 'employee') === key) n++; }); });
+    else if (t === 'participant_role') projects.forEach(function (pr) { (pr.roles || []).forEach(function (x) { if (x.role === key) n++; }); });
+    else if (t === 'developer_type') firms.forEach(function (f) { if (f.dev === key) n++; });
+    return n;
+  }
+  function lkRename(t, row, nn) {
+    var oldKey = lkKey(row), oldName = row.name;
+    row.name = nn; var newKey = lkKey(row);
+    if (t === 'activity_type') acts.forEach(function (a) { if (a.type === oldName) a.type = nn; });
+    else if (t === 'employee_title') persons.forEach(function (p) { if (!isColleague(p)) return; var c = cur(p); if (c && c.titel === oldName) c.titel = nn; if (p.etitel === oldName) p.etitel = nn; });
+    else if (newKey !== oldKey) {
+      if (t === 'contact_function') persons.forEach(function (p) { p.emp.forEach(function (e) { if (e.fkt === oldKey) e.fkt = newKey; }); });
+      else if (t === 'affiliation_type') persons.forEach(function (p) { p.emp.forEach(function (e) { if (e.typ === oldKey) e.typ = newKey; }); });
+      else if (t === 'participant_role') projects.forEach(function (pr) { (pr.roles || []).forEach(function (x) { if (x.role === oldKey) x.role = newKey; }); });
+      else if (t === 'developer_type') firms.forEach(function (f) { if (f.dev === oldKey) f.dev = newKey; });
+    }
+  }
+  function lkRender() {
+    var sel = $('#lk-t'); if (!sel.options.length) sel.innerHTML = optList(LKE, lkCur);
+    sel.value = lkCur;
+    var rows = lkNames(lkCur, false);
+    $('#lk-body').innerHTML = (rows.length ? '' : '<p class="muted">Listen er tom.</p>') + '<ul class="lklist" style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px">' + rows.map(function (r, i) {
+      var n = lkUsage(lkCur, r);
+      return '<li data-lkid="' + r.id + '" style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:6px 10px">' +
+        '<input type="text" data-lkn value="' + esc(r.name) + '" aria-label="Navn" style="flex:1 1 220px;min-width:160px">' +
+        '<label style="display:flex;gap:4px;align-items:center"><input type="checkbox" data-lka' + (r.active ? ' checked' : '') + '> Aktiv</label>' +
+        '<span class="muted">' + n + ' brugt</span>' +
+        '<button type="button" class="btn small" data-lku aria-label="Flyt op"' + (i === 0 ? ' disabled' : '') + '>↑</button><button type="button" class="btn small" data-lkd aria-label="Flyt ned"' + (i === rows.length - 1 ? ' disabled' : '') + '>↓</button>' +
+        (r.is_system ? '<span class="badge">Standard</span>' : '<button type="button" class="btn small" data-lkdel>Slet</button>') + '</li>';
+    }).join('') + '</ul>';
+  }
+  function lkChanged() { syncTyper(); setupForm(); fillProjSelect(); renderAll(); schedule(100); }
+  function lkMove(id, dir) {
+    var rows = lkNames(lkCur, false), i = rows.findIndex(function (r) { return r.id === id; }), j = i + dir;
+    if (i < 0 || j < 0 || j >= rows.length) return;
+    var order = rows.map(function (r) { return r; }); var tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+    order.forEach(function (r, k) { r.sort_order = k + 1; });
+    lkRender(); lkChanged();
+  }
+  function lkOpen() { lkCur = lkCur || 'activity_type'; $('#lk-t').innerHTML = optList(LKE, lkCur); $('#lk').hidden = false; lkRender(); }
+  document.addEventListener('click', function (e) {
+    var t = e.target; if (!t || !t.closest) return;
+    if (t.closest('#btn-lk')) { lkOpen(); return; }
+    if (t.closest('#lk-x')) { $('#lk').hidden = true; return; }
+    if (t.closest('#lk-add')) {
+      var inp = $('#lk-new'), nm = inp.value.trim(); if (!nm) { toast('Skriv et navn'); return; }
+      if (LK[lkCur].some(function (r) { return r.name.toLowerCase() === nm.toLowerCase(); })) { toast('Findes allerede'); return; }
+      lkId(lkCur, nm, true); inp.value = ''; lkRender(); lkChanged(); return;
+    }
+    var li = t.closest('[data-lkid]'); if (!li || !$('#lk') || $('#lk').hidden) return;
+    var id = li.getAttribute('data-lkid'), row = lkRow(lkCur, id); if (!row) return;
+    if (t.closest('[data-lku]')) lkMove(id, -1);
+    else if (t.closest('[data-lkd]')) lkMove(id, 1);
+    else if (t.closest('[data-lkdel]')) {
+      var n = lkUsage(lkCur, row);
+      if (n) { toast('Kan ikke slettes, bruges af ' + n + ' poster. Sæt den til inaktiv i stedet.'); return; }
+      LK[lkCur] = LK[lkCur].filter(function (r) { return r.id !== id; }); lkRender(); lkChanged();
+    }
+  });
+  document.addEventListener('change', function (e) {
+    var t = e.target; if (!t || !t.closest || !$('#lk') || $('#lk').hidden) return;
+    if (t.id === 'lk-t') { lkCur = t.value; lkRender(); return; }
+    var li = t.closest('[data-lkid]'); if (!li) return;
+    var row = lkRow(lkCur, li.getAttribute('data-lkid')); if (!row) return;
+    if (t.hasAttribute('data-lkn')) {
+      var nn = t.value.trim();
+      if (!nn) { t.value = row.name; toast('Navnet må ikke være tomt'); return; }
+      if (LK[lkCur].some(function (r) { return r !== row && r.name.toLowerCase() === nn.toLowerCase(); })) { t.value = row.name; toast('Navnet findes allerede'); return; }
+      lkRename(lkCur, row, nn); lkChanged();
+    } else if (t.hasAttribute('data-lka')) { row.active = t.checked; lkChanged(); }
+  });
+
   if (window.__KR_NOBOOT !== true) boot();
-  window.__KR = { toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
+  window.__KR = { LK: LK, lkKey: lkKey, lkId: lkId, toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
 })();
