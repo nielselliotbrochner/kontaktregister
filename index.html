@@ -330,6 +330,7 @@ textarea { width: 100%; resize: vertical; }
     <button type="button" role="tab" id="tab-f" data-tab="f" aria-selected="false">Virksomheder<span class="n" id="n-f"></span></button>
     <button type="button" role="tab" id="tab-a" data-tab="a" aria-selected="false">Aktiviteter<span class="n" id="n-a"></span></button>
     <button type="button" role="tab" id="tab-j" data-tab="j" aria-selected="false">Projekter<span class="n" id="n-j"></span></button>
+    <button type="button" role="tab" id="tab-w" data-tab="w" aria-selected="false">Rammeaftaler<span class="n" id="n-w"></span></button>
     <button type="button" role="tab" id="tab-g" data-tab="g" aria-selected="false">Pipeline</button>
     <button type="button" role="tab" id="tab-o" data-tab="o" aria-selected="false">Opfølgning<span class="n" id="n-o"></span></button>
     <button type="button" role="tab" id="tab-k" data-tab="k" aria-selected="false">Kort</button>
@@ -535,11 +536,24 @@ textarea { width: 100%; resize: vertical; }
     </div>
   </div>
 
+  <div id="panel-w" role="tabpanel" aria-labelledby="tab-w" hidden>
+    <div class="toolbar">
+      <input type="search" id="q-w" placeholder="Søg på rammeaftale eller bygherre" aria-label="Søg i rammeaftaler">
+      <select id="f-w" aria-label="Fase"></select>
+      <button type="button" class="btn primary" id="np-w">Ny rammeaftale</button>
+      <span class="count" id="c-w"></span>
+    </div>
+    <div class="split" id="split-w">
+      <ul class="list" id="list-w"></ul>
+      <div class="detail" id="detail-w"></div>
+    </div>
+  </div>
   <div id="panel-g" role="tabpanel" aria-labelledby="tab-g" hidden>
     <div class="toolbar">
       <div class="pl-seg" id="seg-metric" role="group" aria-label="Mål"><button type="button" data-v="honorar" aria-pressed="true">Honorar</button><button type="button" data-v="anlaeg" aria-pressed="false">Anlægssum</button></div>
       <div class="pl-seg" id="seg-weight" role="group" aria-label="Vægtning"><button type="button" data-v="1" aria-pressed="true">Vægtet</button><button type="button" data-v="0" aria-pressed="false">Uvægtet</button></div>
       <select id="src-g" aria-label="Kilde"></select>
+      <select id="fw-g" aria-label="Rammeaftaler i pipeline"><option value="rest">Rammeaftaler med restværdi</option><option value="known">Kun kendte projekter</option></select>
       <select id="kt-g" aria-label="Kontakt">
         <option value="">Alle projekter</option>
         <option value="med">Kun med aktivitet</option>
@@ -726,8 +740,8 @@ textarea { width: 100%; resize: vertical; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="config.js?v=1791405946"></script>
-<script src="app.js?v=1791405946"></script>
+<script src="config.js?v=1791407422"></script>
+<script src="app.js?v=1791407422"></script>
 <script>if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});</script>
 </body>
 </html>

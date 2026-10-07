@@ -20,7 +20,7 @@
 
   var TYPO = ['Renovering', 'Skoler og uddannelse', 'Idræt', 'Kultur', 'Boliger (private)', 'Boliger (almene)', 'Kontor', 'Laboratorier', 'Fredede bygninger', 'Hospitaler og sundhed', 'Industri og farma', 'Butikker', 'Hoteller'];
   var TYPO_KAT = ['arkitekt', 'entreprenoer'];
-  var firms = [], persons = [], projects = [], acts = [], followups = [];
+  var firms = [], persons = [], projects = [], acts = [], followups = [], fws = [];
 
   // Datohjælp
   function fmtDate(iso) { return new Date(iso + 'T12:00:00').toLocaleDateString('da-DK', { day: 'numeric', month: 'short', year: 'numeric' }); }
@@ -85,7 +85,7 @@
   // Tilstand
   var tab = 'p';
   var sel = { p: null, f: null, a: null, l: null, k: null, kp: null };
-  var open = { p: false, f: false, a: false, l: false, j: false };
+  var open = { p: false, f: false, a: false, l: false, j: false, w: false };
   var formPeople = [], formProjs = [], formKol = [], formFu = [], formPN = {};
   function pnUI(ids, store, attr) { return ids.length ? '<div class="pnotes">' + ids.map(function (id) { var p = byId(projects, id); return p ? '<label>Intel om ' + esc(p.navn) + '<textarea rows="3" ' + attr + '="' + id + '" placeholder="Hvad blev sagt om dette projekt?">' + esc(store[id] || '') + '</textarea></label>' : ''; }).join('') + '</div>' : ''; }
 
@@ -296,14 +296,14 @@
   var KILDE = { aktivitet: 'Aktivitet', byggefakta: 'Byggefakta', hubexo: 'HUBEXO', andet: 'Andet' };
   var QS = [];
   (function () { var t = TODAY.split('-'), y = +t[0], q = Math.floor((+t[1] - 1) / 3) + 1; for (var i = 0; i < 12; i++) { QS.push(y + ' K' + q); q++; if (q > 4) { q = 1; y++; } } })();
-  var pl = { metric: 'honorar', weighted: 1, fmode: 'cum', board: 'fase', dead: false }, plCharts = {};
+  var pl = { metric: 'honorar', weighted: 1, fmode: 'cum', board: 'fase', dead: false, fw: 'rest' }, plCharts = {};
   function curQ() { var t = TODAY.split('-'); return t[0] + ' K' + (Math.floor((+t[1] - 1) / 3) + 1); }
   function overhalet(pr) { return !!pr.start && pr.start < curQ() && OPENPH.indexOf(pr.fase) >= 0; }
   function qopts(cur) { var l = QS.map(function (q) { return [q, q]; }); if (cur && QS.indexOf(cur) < 0) l.unshift([cur, cur + ' (overhalet)']); return optList(l, cur); }
   function hon(pr) { return pr.honorar || 0; }
   function anl(pr) { return pr.anlaeg != null ? pr.anlaeg : Math.round(hon(pr) * 100) / 10; }
   function pbase(pr) { return pl.metric === 'honorar' ? hon(pr) : anl(pr); }
-  function pprob(pr) { return PH[pr.fase].p / 100; }
+  function pprob(pr) { return (pr.prob != null ? pr.prob : PH[pr.fase].p) / 100; }
   function pvalue(pr) { return pl.weighted ? pbase(pr) * pprob(pr) : pbase(pr); }
   function plsum(list, fn) { return list.reduce(function (a, pr) { return a + fn(pr); }, 0); }
   function plfmt(n, d) { return n.toLocaleString('da-DK', { minimumFractionDigits: d == null ? 0 : d, maximumFractionDigits: d == null ? 1 : d }); }
@@ -318,15 +318,24 @@
     return true;
   }
   function plList() { return projects.filter(plFilter); }
+  function plAll() {
+    if (pl.fw !== 'rest' || $('#kt-g').value) return plList();
+    var src = $('#src-g').value;
+    return plList().concat(fws.filter(function (w) { return !src || w.kilde === src; }).map(fwPseudo));
+  }
 
   function setProj(pr, k, raw) {
     var old = pr[k], val = raw, label = { fase: 'Fase', start: 'Start', honorar: 'Honorar', anlaeg: 'Anlægssum', rm: 'RSM-nummer', bygherre: 'Bygherre', kilde: 'Kilde', begr: 'Begrundelse' }[k];
+    var PN = { area: 1, prob: 1 }, PI = { fw: 1, tresp: 1, presp: 1 };
     if (k === 'honorar' || k === 'anlaeg') { var t = String(raw).replace(',', '.').trim(); val = t === '' ? null : parseFloat(t); if (val != null && (isNaN(val) || val < 0)) { toast('Skriv et tal'); return false; } }
     if (k === 'rm') {
       val = String(raw).trim().toUpperCase();
       if (val && projects.some(function (o) { return o.id !== pr.id && o.rm === val; })) { toast('RSM-nummeret findes allerede på et andet projekt'); return false; }
     }
     if (k === 'bygherre') val = +raw || 0;
+    if (PN[k]) { var t2 = String(raw).replace(',', '.').trim(); val = t2 === '' ? null : parseFloat(t2); if (val != null && (isNaN(val) || val < 0 || (k === 'prob' && val > 100))) { toast(k === 'prob' ? 'Skriv en procent mellem 0 og 100' : 'Skriv et tal'); return false; } }
+    if (PI[k]) val = +raw || 0;
+    if (k === 'fw' && !val) pr.award = '';
     if (old === val || (old == null && val === '')) return true;
     pr[k] = val;
     var show = function (v) {
@@ -336,7 +345,7 @@
       if (k === 'bygherre') { var f = byId(firms, v); return f ? f.navn : 'ikke registreret'; }
       return String(v);
     };
-    if (k !== 'begr') pr.log.unshift({ dato: TODAY, tekst: label + ': ' + show(old) + ' til ' + show(val) });
+    if (label && k !== 'begr') pr.log.unshift({ dato: TODAY, tekst: label + ': ' + show(old) + ' til ' + show(val) });
     return true;
   }
   function fillProjFilters() {
@@ -385,16 +394,36 @@
     var as = projActs(pr.id), ppl = [];
     as.forEach(function (a) { a.people.forEach(function (id) { var x = byId(persons, id); if (x && !isColleague(x) && ppl.indexOf(id) < 0) ppl.push(id); }); });
     var h = '<button type="button" class="btn back" data-back="j">‹ Tilbage til listen</button>';
-    h += '<div><h2>' + esc(pr.navn) + (pr.rm ? ' <span class="rm">' + esc(pr.rm) + '</span>' : '') + '</h2><p class="muted">' + esc(bnavn(pr)) + ' · ' + PH[pr.fase].n + (pr.start ? ' · start ' + pr.start : '') + '</p></div>';
+    var pfw = pr.fw ? byId(fws, pr.fw) : null;
+    h += '<div><h2>' + esc(pr.navn) + (pr.rm ? ' <span class="rm">' + esc(pr.rm) + '</span>' : '') + (pfw ? '<span class="badge">Rammeaftale</span>' : '') + '</h2><p class="muted">' + esc(bnavn(pr)) + ' · ' + PH[pr.fase].n + (pr.cstart ? ' · byggestart ' + fmtDate(pr.cstart) : pr.start ? ' · start ' + pr.start : '') + (pfw ? ' · under <button type="button" class="link" data-fwo="' + pfw.id + '">' + esc(pfw.navn) + '</button>' : '') + '</p>' + dateAlarmHtml(pr) + '</div>';
     h += '<section><h3>Stamdata</h3><div class="fgrid">' +
       '<label for="pj-rm">RSM-nummer<input type="text" id="pj-rm" data-pf="rm" value="' + esc(pr.rm) + '" placeholder="Ikke tildelt"></label>' +
       '<label for="pj-kilde">Kilde<select id="pj-kilde" data-pf="kilde">' + optList(Object.keys(KILDE).map(function (k) { return [k, KILDE[k]]; }), pr.kilde) + '</select></label>' +
       '<label for="pj-by">Bygherre<select id="pj-by" data-pf="bygherre"><option value="0">' + esc(pr.bygherreNavn || 'Ikke registreret') + '</option>' + optList(firms.filter(function (f) { return f.kat === 'bygherre' || f.id === pr.bygherre; }).map(function (f) { return [f.id, f.navn]; }), pr.bygherre) + '</select></label>' +
       '<label for="pj-fase">Fase<select id="pj-fase" data-pf="fase">' + optList(Object.keys(PH).map(function (k) { return [k, PH[k].n]; }), pr.fase) + '</select></label>' +
-      '<label for="pj-start">Forventet start<select id="pj-start" data-pf="start"><option value="">Ikke sat</option>' + qopts(pr.start) + '</select></label>' +
+      '<label for="pj-start">Byggestart, kvartal<select id="pj-start" data-pf="start"><option value="">Ikke sat</option>' + qopts(pr.start) + '</select></label>' +
       '<label for="pj-hon">Honorar, mio. kr.<input type="text" inputmode="decimal" id="pj-hon" data-pf="honorar" value="' + (pr.honorar != null ? String(pr.honorar).replace('.', ',') : '') + '"></label>' +
       '<label for="pj-anl">Anlægssum, mio. kr.<input type="text" inputmode="decimal" id="pj-anl" data-pf="anlaeg" value="' + (pr.anlaeg != null ? String(pr.anlaeg).replace('.', ',') : '') + '" placeholder="' + plfmt(anl(pr)) + ' (10 gange honorar)"></label>' +
-      '</div>' + ((pr.fase === 'fravalgt' || pr.fase === 'tabt') ? '<label class="fgrid" for="pj-begr" style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">Begrundelse<textarea id="pj-begr" data-pf="begr" rows="2" style="text-transform:none;letter-spacing:0;font-size:14px">' + esc(pr.begr) + '</textarea></label>' : '') +
+      '</div><h3>Udbud og rammeaftale</h3><div class="fgrid">' +
+      '<label for="pj-pt">Projekttype<select id="pj-pt" data-pf="ptype">' + optList(lkOpts('project_type', pr.ptype, 'Ikke sat'), pr.ptype) + '</select></label>' +
+      '<label for="pj-ct">Byggetype<select id="pj-ct" data-pf="ctype">' + optList(lkOpts('construction_type', pr.ctype, 'Ikke sat'), pr.ctype) + '</select></label>' +
+      '<label for="pj-or">Vores rolle<select id="pj-or" data-pf="urole">' + optList(lkOpts('our_role', pr.urole, 'Ikke sat'), pr.urole) + '</select></label>' +
+      '<label for="pj-ar">Areal, m²<input type="text" inputmode="decimal" id="pj-ar" data-pf="area" value="' + (pr.area != null ? String(pr.area).replace('.', ',') : '') + '"></label>' +
+      '<label for="pj-pb">Sandsynlighed, %<input type="text" inputmode="decimal" id="pj-pb" data-pf="prob" value="' + (pr.prob != null ? String(pr.prob).replace('.', ',') : '') + '" placeholder="' + PH[pr.fase].p + ' (fasens standard)"></label>' +
+      '<label for="pj-fw">Rammeaftale<select id="pj-fw" data-pf="fw"><option value="0">Ingen</option>' + optList(fws.map(function (w) { return [w.id, w.navn]; }), pr.fw) + '</select></label>' +
+      (pr.fw ? '<label for="pj-aw">Tildeling<select id="pj-aw" data-pf="award">' + optList(lkOpts('award_type', pr.award, 'Ikke sat'), pr.award) + '</select></label>' : '') +
+      '<label for="pj-pqd">PQ-frist<input type="date" id="pj-pqd" data-pf="pqd" value="' + esc(pr.pqd || '') + '"></label>' +
+      '<label for="pj-pqr">PQ-ansvarlig<select id="pj-pqr" data-pf="presp"><option value="0">Ingen</option>' + optList(colleagues().map(function (q) { return [q.id, q.navn]; }), pr.presp) + '</select></label>' +
+      '<label for="pj-td">Tilbudsfrist<input type="date" id="pj-td" data-pf="tdate" value="' + esc(pr.tdate || '') + '"></label>' +
+      '<label for="pj-tr">Tilbudsansvarlig<select id="pj-tr" data-pf="tresp"><option value="0">Ingen</option>' + optList(colleagues().map(function (q) { return [q.id, q.navn]; }), pr.tresp) + '</select></label>' +
+      '<label for="pj-cs">Byggestart, dato<input type="date" id="pj-cs" data-pf="cstart" value="' + esc(pr.cstart || '') + '"></label>' +
+      '<label for="pj-ce">Byggeslut, dato<input type="date" id="pj-ce" data-pf="cend" value="' + esc(pr.cend || '') + '"></label>' +
+      '<label for="pj-ps">Projektstart<input type="date" id="pj-ps" data-pf="pstart" value="' + esc(pr.pstart || '') + '"></label>' +
+      '<label for="pj-pe">Projektslut<input type="date" id="pj-pe" data-pf="pend" value="' + esc(pr.pend || '') + '"></label>' +
+      '<label for="pj-rg">Region<input type="text" id="pj-rg" data-pf="region" value="' + esc(pr.region || '') + '"></label>' +
+      '<label for="pj-di">Område<input type="text" id="pj-di" data-pf="district" value="' + esc(pr.district || '') + '"></label>' +
+      '</div><label class="fgrid" for="pj-ds" style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">Beskrivelse<textarea id="pj-ds" data-pf="desc" rows="3" style="text-transform:none;letter-spacing:0;font-size:14px">' + esc(pr.desc || '') + '</textarea></label>' +
+      ((pr.fase === 'fravalgt' || pr.fase === 'tabt') ? '<label class="fgrid" for="pj-begr" style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">Begrundelse<textarea id="pj-begr" data-pf="begr" rows="2" style="text-transform:none;letter-spacing:0;font-size:14px">' + esc(pr.begr) + '</textarea></label>' : '') +
       (pr.loc ? '<div class="actions"><button type="button" class="btn small" data-mapproj="' + pr.id + '">Vis på kort</button></div>' : '') + '</section>';
     h += '<section><h3>Aktiviteter og kontakter</h3>';
     if (as.length) {
@@ -412,16 +441,17 @@
 
   // Pipeline
   function renderPipeStats() {
-    var list = plList(), open = list.filter(function (pr) { return OPENPH.indexOf(pr.fase) >= 0; }), won = list.filter(function (pr) { return pr.fase === 'vundet'; });
+    var list = plAll(), open = list.filter(function (pr) { return OPENPH.indexOf(pr.fase) >= 0; }), won = list.filter(function (pr) { return pr.fase === 'vundet'; }), fwo = open.filter(function (pr) { return pr._fw; });
     var items = [
       ['Åben pipeline, honorar', plfmt(plsum(open, hon)), 'mio. kr.', open.length + ' åbne projekter'],
       ['Vægtet honorar', plfmt(plsum(open, function (pr) { return hon(pr) * pprob(pr); })), 'mio. kr.', 'efter fasens sandsynlighed'],
       ['Åben anlægssum', plfmt(plsum(open, anl), 0), 'mio. kr.', 'samlet byggesum, uvægtet'],
-      ['Vundet', plfmt(plsum(won, hon)), 'mio. kr.', won.length + ' projekter'],
-      ['Uden aktivitet', String(open.filter(function (pr) { return !projActs(pr.id).length; }).length), 'projekter', 'åbne, endnu uden kontakt']
+      ['Vundet', plfmt(plsum(won, hon)), 'mio. kr.', won.length + ' projekter og rammeaftaler'],
+      ['Heraf rammeaftaler', plfmt(plsum(fwo, hon)), 'mio. kr.', fwo.length + (pl.fw === 'rest' ? ' åbne, restværdi' : ' skjult, kun kendte projekter')],
+      ['Uden aktivitet', String(open.filter(function (pr) { return !pr._fw && !projActs(pr.id).length; }).length), 'projekter', 'åbne, endnu uden kontakt']
     ];
     $('#pl-stats').innerHTML = items.map(function (i) { return '<div class="pl-stat"><span class="k">' + i[0] + '</span><span class="v">' + i[1] + '<small>' + i[2] + '</small></span><span class="n">' + i[3] + '</span></div>'; }).join('');
-    var mis = list.filter(function (pr) { return missing(pr) && PHL.indexOf(pr.fase) >= 0; }).length;
+    var mis = list.filter(function (pr) { return !pr._fw && missing(pr) && PHL.indexOf(pr.fase) >= 0; }).length;
     $('#miss-g').textContent = mis ? mis + ' projekter mangler start eller honorar og er ikke med i kvartalsdiagrammerne.' : '';
   }
   function themeBits() { return { fg: css('--fg'), muted: css('--muted'), line: css('--line'), surface: css('--surface'), font: css('--font-body') }; }
@@ -432,10 +462,10 @@
   }
   function renderFunnel() {
     if (!HAS) return;
-    var t = themeBits(), list = plList();
+    var t = themeBits(), list = plAll();
     var data = PHL.map(function (id, i) {
       var l = list.filter(function (pr) { return pl.fmode === 'cum' ? PHL.indexOf(pr.fase) >= i : pr.fase === id; }), v = plsum(l, pvalue);
-      return { name: PH[id].n, value: v, itemStyle: { color: css(PH[id].c), borderColor: t.surface, borderWidth: 1 }, lbl: PH[id].n + '\n' + l.length + ' stk. · ' + plfmt(v) + ' mio.' };
+      return { name: PH[id].n, value: v, itemStyle: { color: css(PH[id].c), borderColor: t.surface, borderWidth: 1 }, lbl: PH[id].n + '\n' + l.length + ' stk. · ' + plfmt(v) + ' mio.' + (l.some(function (pr) { return pr._fw; }) ? '\nheraf ' + l.filter(function (pr) { return pr._fw; }).length + ' Rammeaftale' : '') };
     });
     var max = Math.max.apply(null, data.map(function (d) { return d.value; })) || 1;
     plCharts.funnel.setOption({
@@ -444,7 +474,7 @@
       series: [{ type: 'funnel', sort: 'none', min: 0, max: max, minSize: '6%', maxSize: '100%', left: '2%', top: 8, bottom: 8, width: '52%', gap: 3,
         label: { position: 'right', color: t.fg, fontSize: 12, lineHeight: 17, formatter: function (p) { return p.data.lbl; } }, labelLine: { length: 14, lineStyle: { color: t.line } }, data: data }]
     }, true);
-    $('#cap-funnel').textContent = (pl.fmode === 'cum' ? 'Hvert trin viser projekter, der har nået fasen eller er videre. ' : 'Hvert trin viser projekter, der står i fasen nu. ') + 'Mål: ' + plUnit() + (pl.weighted ? ', vægtet med fasens sandsynlighed' : ', uvægtet') + '. Vundet er med, tabte og fravalgte er udeladt.';
+    $('#cap-funnel').textContent = (pl.fmode === 'cum' ? 'Hvert trin viser projekter, der har nået fasen eller er videre. ' : 'Hvert trin viser projekter, der står i fasen nu. ') + 'Mål: ' + plUnit() + (pl.weighted ? ', vægtet med fasens sandsynlighed' : ', uvægtet') + '. Vundet er med, tabte og fravalgte er udeladt.' + (pl.fw === 'rest' ? ' Rammeaftaler indgår med restværdi (honorar x vores andel x resterende periode) og er markeret Rammeaftale. Deres kendte projekter står som egne poster ved siden af.' : ' Rammeaftaler er skjult. Kun kendte projekter indgår.');
   }
   function renderQuarter() {
     if (!HAS) return;
@@ -488,14 +518,14 @@
       '<label for="pl-ph-' + pr.id + '">Fase<select id="pl-ph-' + pr.id + '" data-pb="' + pr.id + ':fase">' + optList(Object.keys(PH).map(function (k) { return [k, PH[k].n]; }), pr.fase) + '</select></label></div></div>';
   }
   function renderBoard() {
-    var list = plList(), el = $('#board'), keep = el.scrollLeft, byq = pl.board === 'kvartal';
+    var list = plAll(), el = $('#board'), keep = el.scrollLeft, byq = pl.board === 'kvartal';
     $('#cap-board').textContent = byq
       ? 'Samme kort fordelt på forventet startkvartal. Skift kvartal eller fase på et kort, og alle visninger opdateres. Ændringer gemmes i projektets historik.'
       : 'Skift fase eller startkvartal på et kort, og alle visninger opdateres. Ændringer gemmes i projektets historik.';
     if (!byq) {
       el.innerHTML = Object.keys(PH).filter(function (id) { return pl.dead || (id !== 'tabt' && id !== 'fravalgt'); }).map(function (id) {
         var l = list.filter(function (pr) { return pr.fase === id; }).sort(function (a, b) { return hon(b) - hon(a); });
-        return '<div class="pl-col" style="--c:var(' + PH[id].c + ')"><div class="pl-colhead"><div class="t"><span>' + esc(PH[id].n) + '</span><span>' + l.length + '</span></div><div class="m">' + plfmt(plsum(l, hon)) + ' mio. · ' + PH[id].p + ' %</div></div>' + l.map(function (pr) { return boardCard(pr, false); }).join('') + '</div>';
+        return '<div class="pl-col" style="--c:var(' + PH[id].c + ')"><div class="pl-colhead"><div class="t"><span>' + esc(PH[id].n) + '</span><span>' + l.length + '</span></div><div class="m">' + plfmt(plsum(l, hon)) + ' mio. · ' + PH[id].p + ' %</div></div>' + l.map(function (pr) { return pr._fw ? fwCard(pr, false) : boardCard(pr, false); }).join('') + '</div>';
       }).join('');
     } else {
       var order = Object.keys(PH);
@@ -506,7 +536,7 @@
         var l = vis.filter(function (pr) { return q === 'over' ? overhalet(pr) : !overhalet(pr) && (pr.start || '') === q; }).sort(function (a, b) { return order.indexOf(a.fase) - order.indexOf(b.fase) || hon(b) - hon(a); });
         var live = l.filter(function (pr) { return pr.fase !== 'tabt' && pr.fase !== 'fravalgt'; });
         return '<div class="pl-col" style="--c:' + (q === 'over' ? 'var(--ph-tilbud)' : q ? 'var(--accent)' : 'var(--ph-tabt)') + '"><div class="pl-colhead"><div class="t"><span>' + (q === 'over' ? 'Overhalet' : q ? esc(q.replace(' ', ' ')) : 'Start ikke sat') + '</span><span>' + l.length + '</span></div><div class="m">' + plfmt(plsum(live, hon)) + ' mio. · vægtet ' + plfmt(plsum(live, function (pr) { return hon(pr) * pprob(pr); })) + ' mio.</div></div>' +
-          (q === 'over' ? '<p class="muted" style="font-size:12px">Startkvartal er passeret. Opdater start eller fase.</p>' : '') + (l.length ? l.map(function (pr) { return boardCard(pr, true); }).join('') : '<p class="muted" style="font-size:12px">Ingen projekter</p>') + '</div>';
+          (q === 'over' ? '<p class="muted" style="font-size:12px">Startkvartal er passeret. Opdater start eller fase.</p>' : '') + (l.length ? l.map(function (pr) { return pr._fw ? fwCard(pr, true) : boardCard(pr, true); }).join('') : '<p class="muted" style="font-size:12px">Ingen projekter</p>') + '</div>';
       }).join('');
     }
     el.scrollLeft = keep;
@@ -878,15 +908,19 @@
     var today = open2.filter(function (f) { return diffDays(f.forfald, TODAY) === 0; }).length;
     var warned = open2.filter(function (f) { return alarmOn(f) && diffDays(f.forfald, TODAY) > 0; }).length;
     var total = open2.filter(alarmOn).length;
-    var el = $('#alarm'), n = $('#n-o');
+    var el = $('#alarm'), n = $('#n-o'), da = dateAlarms(), fa = fwWarnings();
     n.textContent = total ? total : ''; n.classList.toggle('hot', total > 0);
-    if (!total) { el.hidden = true; return; }
+    if (!total && !da.length && !fa.length) { el.hidden = true; return; }
     var parts = [];
+    if (da.length) parts.push(da.length + (da.length === 1 ? ' frist' : ' frister') + ' inden for 5 dage');
+    if (fa.length) parts.push(fa.length + (fa.length === 1 ? ' rammeaftale udløber' : ' rammeaftaler udløber') + ' inden for 6 måneder');
     if (over) parts.push(over + ' forfaldne');
     if (today) parts.push(today + ' i dag');
     if (warned) parts.push(warned + ' varslet i forvejen');
     el.hidden = false;
-    el.innerHTML = '<span><strong>Alarm:</strong> ' + parts.join(', ') + '</span><button type="button" class="btn small" data-tab="o">Se opfølgning</button>';
+    el.innerHTML = '<span><strong>Alarm:</strong> ' + parts.join(', ') + '</span>' +
+      (da.length || fa.length ? '<span class="muted">' + da.map(function (x) { return '<button type="button" class="link" data-pj="' + x.pr.id + '">' + esc(x.pr.navn) + '</button> (' + x.what + ' ' + relDays(x.date) + ')'; }).concat(fa.map(function (x) { return '<button type="button" class="link" data-fwo="' + x.w.id + '">' + esc(x.w.navn) + '</button> (udløb ' + fmtDate(x.end) + ')'; })).join(' · ') + '</span>' : '') +
+      '<button type="button" class="btn small" data-tab="o">Se opfølgning</button>';
   }
 
   // Netværk
@@ -1069,7 +1103,7 @@
   function toast(t) { var el = $('#toast'); el.textContent = t; el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.hidden = true; }, 2200); }
   function renderAll() {
     $('#n-p').textContent = persons.length; $('#n-f').textContent = firms.length; $('#n-a').textContent = acts.length;
-    fillTypoSelect(); fillListSelects(); fillProjFilters(); fillPersonForm(); renderProjects(); renderPersons(); renderFirms(); renderActs(); renderLists(); renderFu(); renderAlarm();
+    fillTypoSelect(); fillListSelects(); fillProjFilters(); fillPersonForm(); renderProjects(); renderFw(); renderPersons(); renderFirms(); renderActs(); renderLists(); renderFu(); renderAlarm();
     if (tab === 'h') renderMatrix();
     if (tab === 'g') renderPipeline();
     if (tab === 'k') renderMap(false);
@@ -1077,7 +1111,7 @@
   }
   function showTab(t) {
     tab = t;
-    ['p', 'f', 'a', 'j', 'g', 'o', 'k', 'l', 'h', 'n'].forEach(function (k) {
+    ['p', 'f', 'a', 'j', 'w', 'g', 'o', 'k', 'l', 'h', 'n'].forEach(function (k) {
       $('#panel-' + k).hidden = k !== t;
       $('#tab-' + k).setAttribute('aria-selected', k === t ? 'true' : 'false');
     });
@@ -1096,6 +1130,8 @@
     if (t.closest('#pn-cancel')) { $('#form-p').hidden = true; return; }
     b = t.closest('[data-newperson]');
     if (b) { showTab('p'); openPersonForm(+b.getAttribute('data-newperson')); return; }
+    b = t.closest('[data-fwo]');
+    if (b) { selW = +b.getAttribute('data-fwo'); open.w = true; showTab('w'); renderFw(); return; }
     b = t.closest('[data-pj]');
     if (b) { selJ = +b.getAttribute('data-pj'); open.j = true; showTab('j'); renderProjects(); var dj = $('#detail-j'); if (window.matchMedia && window.matchMedia('(max-width: 899px)').matches) dj.scrollIntoView({ block: 'start' }); return; }
     b = t.closest('[data-newactproj]');
@@ -1215,7 +1251,8 @@
   $('#form-o').addEventListener('submit', saveFuTab);
   $('#n-persons').addEventListener('change', renderNet);
   ['q-j', 'f-j', 's-j', 'k-j', 'o-j'].forEach(function (id) { $('#' + id).addEventListener('input', renderProjects); });
-  ['src-g', 'kt-g'].forEach(function (id) { $('#' + id).addEventListener('input', renderPipeline); });
+  ['src-g', 'kt-g', 'fw-g'].forEach(function (id) { $('#' + id).addEventListener('input', function () { pl.fw = $('#fw-g').value; renderPipeline(); }); });
+  ['q-w', 'f-w'].forEach(function (id) { $('#' + id).addEventListener('input', renderFw); });
   $('#dead-g').addEventListener('change', function () { pl.dead = $('#dead-g').checked; renderBoard(); });
   $('#form-p').addEventListener('submit', function (e) { e.preventDefault(); savePerson(); });
   $('#pn-firm').addEventListener('change', function () { $('#pn-newbox').hidden = $('#pn-firm').value !== 'new'; });
@@ -1245,11 +1282,11 @@
   /* ===================== Datalag: Supabase ===================== */
   var CFG = window.KR_CONFIG || {};
   var SB = null, ME = null, lastRows = null, loadedAt = 0, syncBusy = false, syncTimer = null, syncFail = 0, pending = false, booted = false;
-  var UU = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {} }, NN = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {} }, CNT = { f: 0, p: 0, j: 0, a: 0, o: 0, l: 0 };
+  var UU = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {}, w: {} }, NN = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {}, w: {} }, CNT = { f: 0, p: 0, j: 0, a: 0, o: 0, l: 0, w: 0 };
   var TAGU = {};
 
   /* ---------- Opslagstabeller ---------- */
-  var LKT = ['company_category', 'developer_type', 'company_stage', 'project_stage', 'project_source', 'activity_type', 'activity_status', 'employee_title', 'contact_function', 'affiliation_type', 'participant_role'];
+  var LKT = ['company_category', 'developer_type', 'company_stage', 'project_stage', 'project_source', 'activity_type', 'activity_status', 'employee_title', 'contact_function', 'affiliation_type', 'participant_role', 'project_type', 'construction_type', 'award_type', 'our_role'];
   var LKX = { developer_type: { group_name: null, sector: null }, project_stage: { default_probability: 0, is_open: false }, participant_role: { kind: 'company' } };
   var LK = {};
   LKT.forEach(function (t) { LK[t] = []; });
@@ -1288,6 +1325,7 @@
     if (!NN[k][u]) { var n = ++CNT[k]; NN[k][u] = n; UU[k][n] = u; }
     return NN[k][u];
   }
+  function nn(v) { return v == null || v === '' || isNaN(+v) ? null : +v; }
   function qd(v) { return v == null || v === '' ? null : v; }
   function dm(ym) { return ym ? (String(ym).length === 7 ? ym + '-01' : String(ym).slice(0, 10)) : null; }
   function splitName(n) { n = String(n || '').trim(); var i = n.indexOf(' '); return i < 0 ? [n, null] : [n.slice(0, i), n.slice(i + 1)]; }
@@ -1324,7 +1362,7 @@
 
   function loadAll() {
     setStatus('busy', 'Henter data…');
-    var T = [['company', ['created_at', 'id']], ['employee', ['created_at', 'id']], ['contact', ['created_at', 'id']], ['contact_company', ['id']], ['project', ['created_at', 'id']], ['project_log', ['changed_at', 'id']],
+    var T = [['company', ['created_at', 'id']], ['employee', ['created_at', 'id']], ['contact', ['created_at', 'id']], ['contact_company', ['id']], ['framework', ['created_at', 'id']], ['project', ['created_at', 'id']], ['project_log', ['changed_at', 'id']],
       ['roles', ['created_at', 'id']], ['activity', ['created_at', 'id']], ['activity_contact', ['activity_id', 'contact_id']], ['activity_employee', ['activity_id', 'employee_id']], ['activity_project', ['activity_id', 'project_id']],
       ['followup', ['due_date', 'id']], ['company_typology', ['company_id', 'typology_id']], ['label', ['name', 'id']], ['label_link', ['id']], ['attachment', ['created_at', 'id']]];
     LKT.forEach(function (t) { T.push([t, ['sort_order', 'id']]); });
@@ -1336,8 +1374,8 @@
   }
 
   function applyData(D) {
-    [firms, persons, projects, acts, followups, lists].forEach(function (a) { a.length = 0; });
-    ['f', 'p', 'j', 'a', 'o', 'l'].forEach(function (k) { UU[k] = {}; NN[k] = {}; CNT[k] = 0; });
+    [firms, persons, projects, acts, followups, lists, fws].forEach(function (a) { a.length = 0; });
+    ['f', 'p', 'j', 'a', 'o', 'l', 'w'].forEach(function (k) { UU[k] = {}; NN[k] = {}; CNT[k] = 0; });
     TAGU = {};
     LKT.forEach(function (t) {
       LK[t] = (D[t] || []).map(function (r) {
@@ -1383,11 +1421,23 @@
       if (listOf[k.label_id]) listOf[k.label_id].members.push(p.id);
       else if (tagOf[k.label_id]) p.tags.push(tagOf[k.label_id]);
     });
+    var fwr = {};
+    D.roles.forEach(function (g) { if (g.framework_id) (fwr[g.framework_id] = fwr[g.framework_id] || []).push(g); });
+    D.framework.forEach(function (v) {
+      var fw = { id: numOf('w', v.id), navn: v.name, besk: v.description || '', kilde: lkK('project_source', v.source_id), bygherre: v.company_id ? numOf('f', v.company_id) : 0, fase: lkK('project_stage', v.stage_id),
+        anlaeg: nn(v.value), honorar: nn(v.own_value), start: v.start_date || '', slut: v.end_date || '', forl: v.extension_note || '', forlSlut: v.extension_end_date || '', andel: nn(v.own_share), andelNote: v.share_note || '', vaegt: nn(v.weighting),
+        resp: v.responsible_id ? numOf('p', v.responsible_id) : 0, roles: [] };
+      (fwr[v.id] || []).forEach(function (g) { fw.roles.push({ id: g.id, firm: g.company_id ? numOf('f', g.company_id) : 0, contact: g.contact_id ? numOf('p', g.contact_id) : 0, role: lkK('participant_role', g.role_id), win: !!g.is_winner, note: g.notes || '' }); });
+      fws.push(fw);
+    });
     var logs = {}, rl = {};
     D.project_log.forEach(function (g) { (logs[g.project_id] = logs[g.project_id] || []).push(g); });
     D.roles.forEach(function (g) { if (g.project_id) (rl[g.project_id] = rl[g.project_id] || []).push(g); });
     D.project.forEach(function (v) {
-      var pr = { id: numOf('j', v.id), navn: v.title, bygherre: 0, fase: lkK('project_stage', v.stage_id), honorar: v.own_value == null ? null : +v.own_value, begr: v.rationale || '', rm: v.rsm || '', kilde: lkK('project_source', v.source_id), start: v.construction_start_quarter || '', anlaeg: v.value == null ? null : +v.value, bygherreNavn: v.developer_name || '', log: [], roles: [], _bid: null };
+      var pr = { id: numOf('j', v.id), navn: v.title, bygherre: 0, fase: lkK('project_stage', v.stage_id), honorar: v.own_value == null ? null : +v.own_value, begr: v.rationale || '', rm: v.rsm || '', kilde: lkK('project_source', v.source_id), start: v.construction_start_quarter || '', anlaeg: v.value == null ? null : +v.value, bygherreNavn: v.developer_name || '', log: [], roles: [], _bid: null,
+        ptype: lkK('project_type', v.project_type_id), ctype: lkK('construction_type', v.construction_type_id), urole: lkK('our_role', v.our_role_id), award: lkK('award_type', v.award_type_id), fw: v.framework_id ? numOf('w', v.framework_id) : 0,
+        area: nn(v.area), prob: nn(v.probability), pqd: v.pq_date || '', tdate: v.tender_date || '', pstart: v.project_start || '', pend: v.project_end || '', cstart: v.construction_start || '', cend: v.construction_end || '',
+        desc: v.description || '', adr2: v.address2 || '', district: v.district || '', region: v.region || '', land: v.country || 'Danmark', tresp: v.tender_responsible_id ? numOf('p', v.tender_responsible_id) : 0, presp: v.pq_responsible_id ? numOf('p', v.pq_responsible_id) : 0 };
       (rl[v.id] || []).forEach(function (g) {
         var rk = lkK('participant_role', g.role_id);
         if (rk === 'client' && g.company_id && !pr._bid) { pr.bygherre = numOf('f', g.company_id); pr._bid = g.id; return; }
@@ -1440,7 +1490,7 @@
 
   /* ---------- Model til rækker ---------- */
   function toRows() {
-    var R = { employee: {}, company: {}, contact: {}, contact_company: {}, project: {}, roles: {}, activity: {}, activity_contact: {}, activity_employee: {}, activity_project: {}, followup: {}, company_typology: {}, label: {}, label_link: {} };
+    var R = { employee: {}, company: {}, contact: {}, contact_company: {}, framework: {}, project: {}, roles: {}, activity: {}, activity_contact: {}, activity_employee: {}, activity_project: {}, followup: {}, company_typology: {}, label: {}, label_link: {} };
     LKT.forEach(function (t) { R[t] = {}; });
     firms.forEach(function (f) {
       var a = f.adr || f.adrx || null, id = uidOf('f', f.id);
@@ -1486,18 +1536,35 @@
       var id = uidOf('j', pr.id), a = pr.loc || pr.locx || null;
       R.project[id] = { id: id, rsm: qd(pr.rm), title: pr.navn, developer_name: qd(pr.bygherreNavn), stage_id: lkId('project_stage', pr.fase), source_id: lkId('project_source', pr.kilde),
         own_value: pr.honorar == null ? null : pr.honorar, value: pr.anlaeg == null ? null : pr.anlaeg, construction_start_quarter: qd(pr.start), rationale: qd(pr.begr),
-        address1: a ? qd(a.vej) : null, postal_code: a ? qd(a.post) : null, city: a ? qd(a.by) : null, lat: pr.loc ? pr.loc.lat : null, lng: pr.loc ? pr.loc.lng : null };
+        address1: a ? qd(a.vej) : null, postal_code: a ? qd(a.post) : null, city: a ? qd(a.by) : null, lat: pr.loc ? pr.loc.lat : null, lng: pr.loc ? pr.loc.lng : null,
+        project_type_id: pr.ptype ? lkId('project_type', pr.ptype) : null, construction_type_id: pr.ctype ? lkId('construction_type', pr.ctype) : null, our_role_id: pr.urole ? lkId('our_role', pr.urole) : null, award_type_id: pr.award ? lkId('award_type', pr.award) : null,
+        framework_id: pr.fw ? uidOf('w', pr.fw) : null, area: nn(pr.area), probability: nn(pr.prob), pq_date: qd(pr.pqd), tender_date: qd(pr.tdate), project_start: qd(pr.pstart), project_end: qd(pr.pend), construction_start: qd(pr.cstart), construction_end: qd(pr.cend),
+        description: qd(pr.desc), address2: qd(pr.adr2), district: qd(pr.district), region: qd(pr.region), country: pr.land || 'Danmark',
+        tender_responsible_id: pr.tresp ? uidOf('p', pr.tresp) : null, pq_responsible_id: pr.presp ? uidOf('p', pr.presp) : null };
       var cu = pr.bygherre ? uidOf('f', pr.bygherre) : null;
       if (cu && R.company[cu]) {
         if (!pr._bid) pr._bid = newUuid();
-        R.roles[pr._bid] = { id: pr._bid, company_id: cu, contact_id: null, project_id: id, role_id: clientRole, is_winner: false, notes: null };
+        R.roles[pr._bid] = { id: pr._bid, company_id: cu, contact_id: null, project_id: id, framework_id: null, role_id: clientRole, is_winner: false, notes: null };
       }
       (pr.roles || []).forEach(function (r) {
         var fu = r.firm ? uidOf('f', r.firm) : null, ku = r.contact ? uidOf('p', r.contact) : null;
         if (fu && !R.company[fu]) fu = null; if (ku && !R.contact[ku]) ku = null;
         if (!fu && !ku) return;
         if (!r.id) r.id = newUuid();
-        R.roles[r.id] = { id: r.id, company_id: fu, contact_id: ku, project_id: id, role_id: lkId('participant_role', r.role, true), is_winner: !!r.win, notes: qd(r.note) };
+        R.roles[r.id] = { id: r.id, company_id: fu, contact_id: ku, project_id: id, framework_id: null, role_id: lkId('participant_role', r.role, true), is_winner: !!r.win, notes: qd(r.note) };
+      });
+    });
+    fws.forEach(function (w) {
+      var id = uidOf('w', w.id), cu = w.bygherre ? uidOf('f', w.bygherre) : null;
+      R.framework[id] = { id: id, name: w.navn, description: qd(w.besk), source_id: w.kilde ? lkId('project_source', w.kilde) : null, company_id: cu && R.company[cu] ? cu : null, stage_id: lkId('project_stage', w.fase),
+        value: nn(w.anlaeg), own_value: nn(w.honorar), start_date: qd(w.start), end_date: qd(w.slut), extension_note: qd(w.forl), extension_end_date: qd(w.forlSlut), own_share: nn(w.andel), share_note: qd(w.andelNote), weighting: nn(w.vaegt),
+        responsible_id: w.resp && R.employee[uidOf('p', w.resp)] ? uidOf('p', w.resp) : null };
+      (w.roles || []).forEach(function (x) {
+        var fu = x.firm ? uidOf('f', x.firm) : null, ku = x.contact ? uidOf('p', x.contact) : null;
+        if (fu && !R.company[fu]) fu = null; if (ku && !R.contact[ku]) ku = null;
+        if (!fu && !ku) return;
+        if (!x.id) x.id = newUuid();
+        R.roles[x.id] = { id: x.id, company_id: fu, contact_id: ku, project_id: null, framework_id: id, role_id: lkId('participant_role', x.role, true), is_winner: !!x.win, notes: qd(x.note) };
       });
     });
     acts.forEach(function (a) {
@@ -1532,7 +1599,7 @@
   }
 
   /* ---------- Diff og skrivning ---------- */
-  var ORDER = LKT.concat(['employee', 'company', 'contact', 'contact_company', 'project', 'roles', 'activity', 'activity_contact', 'activity_employee', 'activity_project', 'followup', 'company_typology', 'label', 'label_link']);
+  var ORDER = LKT.concat(['employee', 'company', 'contact', 'contact_company', 'framework', 'project', 'roles', 'activity', 'activity_contact', 'activity_employee', 'activity_project', 'followup', 'company_typology', 'label', 'label_link']);
   var PKS = { activity_contact: ['activity_id', 'contact_id'], activity_employee: ['activity_id', 'employee_id'], activity_project: ['activity_id', 'project_id'], company_typology: ['company_id', 'typology_id'], label_link: ['label_id', 'contact_id'] };
 
   function diff(oldR, newR) {
@@ -2383,6 +2450,166 @@
     } else if (t.hasAttribute('data-lka')) { row.active = t.checked; lkChanged(); }
   });
 
+  /* ===================== Rammeaftaler ===================== */
+  var selW = 0;
+  function fwEnd(w) { return w.forlSlut || w.slut || ''; }
+  // Andel af resterende tid (0 til 1). Uden datoer regnes hele værdien.
+  function fwRest(w) {
+    var e = fwEnd(w); if (!w.start || !e) return 1;
+    var tot = diffDays(e, w.start); if (tot <= 0) return 1;
+    var r = diffDays(e, TODAY) / tot; return r < 0 ? 0 : r > 1 ? 1 : r;
+  }
+  function fwHon(w) { return (w.honorar || 0) * (w.andel != null ? w.andel : 100) / 100; }
+  function fwRestHon(w) { return fwHon(w) * fwRest(w); }
+  function fwRestAnl(w) { return (w.anlaeg || 0) * fwRest(w); }
+  function fwQuarter(iso) { return iso ? iso.slice(0, 4) + ' K' + Math.ceil(+iso.slice(5, 7) / 3) : ''; }
+  function fwPseudo(w) {
+    return { id: 'w' + w.id, navn: w.navn, bygherre: w.bygherre, fase: w.fase, honorar: Math.round(fwRestHon(w) * 100) / 100, anlaeg: Math.round(fwRestAnl(w) * 100) / 100,
+      start: fwQuarter(w.start), kilde: w.kilde, prob: w.vaegt, _fw: w, log: [], roles: [] };
+  }
+  function fwKnown(w) { return projects.filter(function (p) { return p.fw === w.id; }); }
+  function fwCard(pr, showPhase) {
+    var w = pr._fw, dead = w.fase === 'tabt' || w.fase === 'fravalgt', k = fwKnown(w).length;
+    return '<div class="pl-card" style="' + (showPhase ? 'border-left:4px solid var(' + PH[w.fase].c + ');' : '') + (dead ? 'opacity:.75;' : '') + '"><div class="nm">' + esc(w.navn) + '<span class="badge">Rammeaftale</span></div><div class="by">' + esc(bnavn(pr)) + '</div>' +
+      (showPhase ? '<div class="by"><span class="dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(' + PH[w.fase].c + ');margin-right:5px"></span>' + esc(PH[w.fase].n) + ' · ' + Math.round(pprob(pr) * 100) + ' %</div>' : '') +
+      '<div class="vals"><span>rest ' + plfmt(pr.honorar) + ' mio.</span><span>anlæg ' + plfmt(pr.anlaeg, 0) + ' mio.</span></div>' +
+      '<div class="by">' + k + (k === 1 ? ' kendt projekt' : ' kendte projekter') + ' · <button type="button" class="link" data-fwo="' + w.id + '">Åbn</button></div></div>';
+  }
+
+  // Alarmer
+  function dateAlarms() {
+    var out = [];
+    projects.forEach(function (pr) {
+      if (OPENPH.indexOf(pr.fase) < 0) return;
+      [['pqd', 'PQ-frist'], ['tdate', 'tilbudsfrist']].forEach(function (x) {
+        var d = pr[x[0]]; if (!d) return;
+        var n = diffDays(d, TODAY);
+        if (n >= 0 && n <= 5) out.push({ pr: pr, what: x[1], date: d });
+      });
+    });
+    return out.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  }
+  function dateAlarmHtml(pr) {
+    return dateAlarms().filter(function (x) { return x.pr.id === pr.id; }).map(function (x) { return '<p><span class="badge warn">' + esc(x.what) + ' ' + relDays(x.date) + '</span> ' + fmtDate(x.date) + '</p>'; }).join('');
+  }
+  function fwWarnings() {
+    var lim = addDays(TODAY, 183);
+    return fws.filter(function (w) { var e = fwEnd(w); return w.fase === 'vundet' && e && e >= TODAY && e <= lim; }).map(function (w) { return { w: w, end: fwEnd(w) }; });
+  }
+
+  // Liste og detalje
+  function fwStats(w) {
+    var ps = fwKnown(w), s = { n: ps.length, won: 0, lost: 0, bid: 0, hon: 0, by: {} };
+    ps.forEach(function (p) {
+      var won = p.fase === 'vundet', lost = p.fase === 'tabt', bid = won || lost || p.fase === 'tilbud';
+      if (won) { s.won++; s.hon += hon(p); } if (lost) s.lost++; if (bid) s.bid++;
+      var k = p.award || ''; var b = s.by[k] = s.by[k] || { won: 0, lost: 0 };
+      if (won) b.won++; if (lost) b.lost++;
+    });
+    return s;
+  }
+  function fwPct(a, b) { return b ? Math.round(a * 100 / b) + ' %' : 'ingen afgjorte'; }
+  function renderFw() {
+    var q = $('#q-w').value.trim().toLowerCase(), fs = $('#f-w').value, f = $('#f-w'), c0 = f.value;
+    if (!f.options.length) { f.innerHTML = '<option value="">Alle faser</option>' + Object.keys(PH).map(function (k) { return '<option value="' + k + '">' + esc(PH[k].n) + '</option>'; }).join(''); f.value = c0; fs = f.value; }
+    $('#n-w').textContent = fws.length || '';
+    var list = fws.filter(function (w) { return (!fs || w.fase === fs) && (!q || (w.navn + ' ' + bnavn({ bygherre: w.bygherre })).toLowerCase().indexOf(q) >= 0); });
+    list.sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); });
+    $('#c-w').textContent = list.length + ' af ' + fws.length;
+    $('#list-w').innerHTML = list.length ? list.map(function (w) {
+      var warn = fwWarnings().some(function (x) { return x.w.id === w.id; });
+      return '<li><button type="button" class="item" data-fwo="' + w.id + '" aria-current="' + (selW === w.id) + '"><span class="t">' + esc(w.navn) + (warn ? '<span class="badge warn">Udløber</span>' : '') + '</span><span class="d">' + (w.honorar ? 'rest ' + plfmt(fwRestHon(w), 1) + ' mio.' : 'Honorar mangler') + '</span>' +
+        '<span class="s">' + esc(bnavn({ bygherre: w.bygherre })) + ' · ' + PH[w.fase].n + (fwEnd(w) ? ' · til ' + fwEnd(w) : '') + '</span></button></li>';
+    }).join('') : '<li class="empty">Ingen rammeaftaler. Opret en med knappen ovenfor.</li>';
+    $('#detail-w').innerHTML = fwDetail(byId(fws, selW));
+    $('#split-w').classList.toggle('open', open.w);
+  }
+  function wIn(label, k, w, type, ph) { return '<label>' + esc(label) + '<input type="' + (type || 'text') + '" data-wf="' + k + '" value="' + esc(w[k] == null ? '' : String(w[k]).replace('.', type === 'date' ? '.' : ',')) + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + (type === 'num' ? ' inputmode="decimal"' : '') + '></label>'; }
+  function wNum(label, k, w, ph) { return '<label>' + esc(label) + '<input type="text" inputmode="decimal" data-wf="' + k + '" value="' + (w[k] != null ? String(w[k]).replace('.', ',') : '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></label>'; }
+  function wDate(label, k, w) { return '<label>' + esc(label) + '<input type="date" data-wf="' + k + '" value="' + esc(w[k] || '') + '"></label>'; }
+  function fwDetail(w) {
+    if (!w) return '<p class="empty">Vælg en rammeaftale.</p>';
+    var s = fwStats(w), r = fwRest(w), ps = fwKnown(w), ad = [], bys = Object.keys(s.by);
+    var h = '<button type="button" class="btn back" data-back="w">‹ Tilbage til listen</button>';
+    h += '<div><h2>' + esc(w.navn) + '<span class="badge">Rammeaftale</span></h2><p class="muted">' + esc(bnavn({ bygherre: w.bygherre })) + ' · ' + PH[w.fase].n + (fwEnd(w) ? ' · udløber ' + fmtDate(fwEnd(w)) : '') + '</p>' +
+      fwWarnings().filter(function (x) { return x.w.id === w.id; }).map(function () { return '<p><span class="badge warn">Udløber inden for 6 måneder</span></p>'; }).join('') + '</div>';
+    h += '<section><h3>Stamdata</h3><div class="fgrid">' +
+      wIn('Navn', 'navn', w) +
+      '<label>Bygherre<select data-wf="bygherre"><option value="0">Ikke registreret</option>' + optList(firms.filter(function (f) { return f.kat === 'bygherre' || f.id === w.bygherre; }).map(function (f) { return [f.id, f.navn]; }), w.bygherre) + '</select></label>' +
+      '<label>Fase<select data-wf="fase">' + optList(Object.keys(PH).map(function (k) { return [k, PH[k].n]; }), w.fase) + '</select></label>' +
+      '<label>Kilde<select data-wf="kilde">' + optList(Object.keys(KILDE).map(function (k) { return [k, KILDE[k]]; }), w.kilde) + '</select></label>' +
+      wNum('Anlægssum, mio. kr.', 'anlaeg', w) + wNum('Honorar, mio. kr.', 'honorar', w) +
+      wNum('Vores andel, %', 'andel', w, '100 (hele honoraret)') + wIn('Note til andel', 'andelNote', w) +
+      wNum('Sandsynlighed, %', 'vaegt', w, PH[w.fase].p + ' (fasens standard)') +
+      '<label>Ansvarlig<select data-wf="resp"><option value="0">Ingen</option>' + optList(colleagues().map(function (q) { return [q.id, q.navn]; }), w.resp) + '</select></label>' +
+      wDate('Start', 'start', w) + wDate('Slut', 'slut', w) + wDate('Forlænget til', 'forlSlut', w) + wIn('Note om forlængelse', 'forl', w) +
+      '</div><label style="display:flex;flex-direction:column;gap:3px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">Beskrivelse<textarea data-wf="besk" rows="3" style="text-transform:none;letter-spacing:0;font-size:14px">' + esc(w.besk) + '</textarea></label></section>';
+    h += '<section><h3>Restværdi</h3><div class="bar" style="height:10px;border-radius:5px;background:var(--band);overflow:hidden"><div style="height:100%;width:' + Math.round(r * 100) + '%;background:var(--accent)"></div></div>' +
+      '<p>' + Math.round(r * 100) + ' % af perioden er tilbage. Resterende honorar ' + plfmt(fwRestHon(w), 1) + ' mio. kr. af ' + plfmt(fwHon(w), 1) + ', resterende anlægssum ' + plfmt(fwRestAnl(w), 0) + ' mio. kr.</p>' +
+      '<p class="muted">Beregnet lineært over tid. Kendte projekter nedenfor trækkes ikke fra, de vises ved siden af.</p></section>';
+    h += '<section><h3>Kendte projekter og hitrate</h3><p>' + s.n + (s.n === 1 ? ' projekt' : ' projekter') + ': ' + s.won + ' vundet, ' + s.lost + ' tabt, ' + s.bid + ' budt på. Vundet honorar ' + plfmt(s.hon, 1) + ' mio. kr. Hitrate ' + fwPct(s.won, s.won + s.lost) + '.</p>';
+    if (bys.length) h += '<ul class="elist">' + bys.map(function (k) { var b = s.by[k]; return '<li><span><b>' + esc(k ? lkName('award_type', k) : 'Tildeling ikke sat') + '</b> · ' + b.won + ' vundet, ' + b.lost + ' tabt, hitrate ' + fwPct(b.won, b.won + b.lost) + '</span></li>'; }).join('') + '</ul>';
+    h += ps.length ? '<ul class="alist">' + ps.map(function (p) { return '<li><div class="hd"><span class="ty">' + esc(PH[p.fase].n) + '</span><button type="button" class="link" data-pj="' + p.id + '">' + esc(p.navn) + '</button></div><span class="note">' + (p.award ? esc(lkName('award_type', p.award)) + ' · ' : '') + plfmt(hon(p), 1) + ' mio.' + '</span></li>'; }).join('') + '</ul>' : '<p class="muted">Ingen projekter er knyttet endnu. Vælg rammeaftalen på projektet.</p>';
+    h += '</section>';
+    h += '<section><h3>Roller på rammeaftalen</h3>' + ((w.roles || []).length ? '<ul class="elist">' + w.roles.map(function (x, i) {
+      var f = x.firm ? byId(firms, x.firm) : null, k = x.contact ? byId(persons, x.contact) : null;
+      return '<li><span><b>' + esc(lkName('participant_role', x.role)) + '</b>' + (f ? ' · ' + go('f', f.id) + esc(f.navn) + '</button>' : '') + (k ? ' · ' + go('p', k.id) + esc(k.navn) + '</button>' : '') + (x.win ? '<span class="badge">Vinder</span>' : '') + (x.note ? ' · ' + esc(x.note) : '') + ' <button type="button" class="btn small" data-wrrm="' + i + '">Fjern</button></span></li>';
+    }).join('') + '</ul>' : '<p class="muted">Ingen roller registreret.</p>') +
+      '<div class="fgrid" id="w-newrole"><label>Rolle<select id="wr-r">' + optList(lkOpts('participant_role', '').filter(function (o) { return o[0] !== 'client'; }), '') + '</select></label>' +
+      '<label>Virksomhed<select id="wr-f"><option value="0">Ingen virksomhed</option>' + optList(firms.slice().sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); }).map(function (f) { return [f.id, f.navn]; }), 0) + '</select></label>' +
+      '<label>Kontakt<select id="wr-c"><option value="0">Ingen kontakt</option>' + optList(persons.filter(function (q) { return !isColleague(q); }).sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); }).map(function (q) { return [q.id, q.navn]; }), 0) + '</select></label>' +
+      '<label>Note<input type="text" id="wr-n"></label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="wr-w"> Vinder</label></div>' +
+      '<div class="actions"><button type="button" class="btn small" id="wr-add">Tilføj rolle</button></div></section>';
+    h += '<section><div class="actions"><button type="button" class="btn small" id="w-del">Slet rammeaftale</button></div></section>';
+    return h;
+  }
+  function setFw(w, k, raw) {
+    var NUM = { anlaeg: 1, honorar: 1, andel: 1, vaegt: 1 }, val = raw;
+    if (NUM[k]) {
+      var t = String(raw).replace(',', '.').trim(); val = t === '' ? null : parseFloat(t);
+      if (val != null && (isNaN(val) || val < 0 || ((k === 'andel' || k === 'vaegt') && val > 100))) { toast('Skriv et tal' + (k === 'andel' || k === 'vaegt' ? ' mellem 0 og 100' : '')); return false; }
+    }
+    if (k === 'bygherre' || k === 'resp') val = +raw || 0;
+    if (k === 'navn') { val = String(raw).trim(); if (!val) { toast('Navn må ikke være tomt'); return false; } }
+    if (k === 'start' || k === 'slut') {
+      var s2 = k === 'start' ? val : w.start, e2 = k === 'slut' ? val : w.slut;
+      if (s2 && e2 && e2 < s2) { toast('Slutdato må ikke ligge før start'); return false; }
+    }
+    w[k] = val; return true;
+  }
+  function newFw() {
+    var w = { id: nextId(fws), navn: 'Ny rammeaftale', besk: '', kilde: 'aktivitet', bygherre: 0, fase: 'rygte', anlaeg: null, honorar: null, start: '', slut: '', forl: '', forlSlut: '', andel: null, andelNote: '', vaegt: null, resp: 0, roles: [] };
+    fws.push(w); selW = w.id; open.w = true; renderAll(); showTab('w');
+    var i = $('#detail-w input[data-wf="navn"]'); if (i) { i.focus(); i.select(); }
+  }
+  function delFw(w) {
+    if (!confirm('Slet rammeaftalen ' + w.navn + '? Tilknyttede projekter bevares uden rammeaftale.')) return;
+    projects.forEach(function (p) { if (p.fw === w.id) { p.fw = 0; p.award = ''; } });
+    fws.splice(fws.indexOf(w), 1); selW = 0; open.w = false; renderAll(); toast('Rammeaftalen er slettet');
+  }
+  document.addEventListener('change', function (e) {
+    var t = e.target; if (!t.matches || !t.matches('[data-wf]')) return;
+    var w = byId(fws, selW); if (!w) return;
+    var k = t.getAttribute('data-wf'), top = t.closest('#detail-w') && t.scrollTop;
+    if (!setFw(w, k, t.value)) { renderFw(); return; }
+    renderAll();
+    var again = $('#detail-w [data-wf="' + k + '"]'); if (again && again.focus && k !== 'fase') again.focus({ preventScroll: true });
+  });
+  document.addEventListener('click', function (e) {
+    var t = e.target; if (!t.closest) return;
+    if (t.closest('#np-w')) { newFw(); return; }
+    if (t.closest('#w-del')) { var w0 = byId(fws, selW); if (w0) delFw(w0); return; }
+    var b = t.closest('[data-wrrm]');
+    if (b) { var w1 = byId(fws, selW); if (w1) { w1.roles.splice(+b.getAttribute('data-wrrm'), 1); renderAll(); } return; }
+    if (t.closest('#wr-add')) {
+      var w2 = byId(fws, selW); if (!w2) return;
+      var fi = +$('#wr-f').value || 0, ci = +$('#wr-c').value || 0;
+      if (!fi && !ci) { toast('Vælg en virksomhed eller en kontakt'); return; }
+      w2.roles.push({ id: null, firm: fi, contact: ci, role: $('#wr-r').value, win: $('#wr-w').checked, note: $('#wr-n').value.trim() });
+      renderAll(); return;
+    }
+  });
+
   if (window.__KR_NOBOOT !== true) boot();
-  window.__KR = { LK: LK, lkKey: lkKey, lkId: lkId, toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
+  window.__KR = { fwRestHon: fwRestHon, dateAlarms: dateAlarms, fwWarnings: fwWarnings, LK: LK, lkKey: lkKey, lkId: lkId, toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, fws: fws, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
 })();
