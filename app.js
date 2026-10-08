@@ -434,7 +434,7 @@
     }
     h += '<div class="actions"><button type="button" class="btn small" data-newactproj="' + pr.id + '">Ny aktivitet med dette projekt</button></div></section>';
     var pnA = as.filter(function (a) { return a.pn && a.pn[pr.id]; });
-    if (pnA.length) h += '<section><h3>Noter og intel</h3><ul class="alist">' + pnA.map(function (a) { return '<li><div class="hd"><span class="ty">' + esc(a.type) + '</span><span class="dt">' + fmtDate(a.dato) + '</span>' + go('a', a.id) + esc(a.titel) + '</button></div><span class="note">' + esc(a.pn[pr.id]) + '</span></li>'; }).join('') + '</ul></section>';
+    if (pnA.length) h += '<section><h3>Intel om projektet fra aktiviteter</h3><ul class="alist">' + pnA.map(function (a) { return '<li><div class="hd"><span class="ty">' + esc(a.type) + '</span><span class="dt">' + fmtDate(a.dato) + '</span>' + go('a', a.id) + esc(a.titel) + '</button></div><span class="note">' + esc(a.pn[pr.id]) + '</span></li>'; }).join('') + '</ul></section>';
     h += '<section><h3>Ændringer</h3>' + (pr.log.length ? '<ul class="logl">' + pr.log.map(function (l) { return '<li><span class="muted">' + fmtDate(l.dato) + '</span> ' + esc(l.tekst) + '</li>'; }).join('') + '</ul>' : '<p class="muted">Ingen ændringer registreret efter oprettelsen.</p>') + '</section>';
     return h;
   }
@@ -893,7 +893,7 @@
     var h = '<button type="button" class="btn back" data-back="a">‹ Tilbage til listen</button>';
     h += '<div><h2>' + esc(a.titel) + stBadge(a) + '</h2><p class="muted">' + esc(a.type) + ' · ' + fmtDate(a.dato) + (a.sted ? ' · ' + esc(a.sted) : '') + '</p>' +
       '<p style="margin-top:6px">' + (a.me ? 'Jeg var selv til stede.' : 'Jeg var ikke til stede. Registreret via kollega: ' + a.via.map(pname).join(', ') + '.') + '</p></div>';
-    h += '<section><h3>Noter og intel</h3><p>' + (a.note ? esc(a.note) : '<span class="muted">Ingen noter.</span>') + '</p></section>';
+    h += '<section><h3>Generelle noter</h3><p>' + (a.note ? esc(a.note) : '<span class="muted">Ingen noter.</span>') + '</p></section>';
     h += '<section><h3>Deltagere</h3><ul class="blist">' + order.map(function (k) {
       var f = k ? byId(firms, k) : null;
       return '<li><strong>' + (f ? go('f', f.id) + esc(f.navn) + '</button>' : 'Virksomhed ikke angivet') + '</strong><span>' +
@@ -1346,7 +1346,15 @@
   function qd(v) { return v == null || v === '' ? null : v; }
   function dm(ym) { return ym ? (String(ym).length === 7 ? ym + '-01' : String(ym).slice(0, 10)) : null; }
   function splitName(n) { n = String(n || '').trim(); var i = n.indexOf(' '); return i < 0 ? [n, null] : [n.slice(0, i), n.slice(i + 1)]; }
-  function parseName(n) { var t = String(n || '').trim().split(/\s+/).filter(Boolean); if (t.length <= 1) return { fn: t[0] || '', mn: '', en: '' }; return { fn: t[0], mn: t.slice(1, -1).join(' '), en: t[t.length - 1] }; }
+  var NPART = ['von', 'van', 'de', 'der', 'den', 'la', 'le', 'af', 'av', 'du', 'di', 'da', 'ten', 'ter', 'zu', 'el', 'al', 'bin', 'ibn', 'dos', 'das', 'del', 'della'];
+  var NPAIR = ['anne marie', 'anne mette', 'anne lise', 'anne grethe', 'anne sofie', 'anne kirstine', 'anne katrine', 'anne louise', 'anne dorte', 'anne britt', 'anne karin', 'lise lotte', 'lis lotte', 'mette marie', 'marie louise', 'maria louise', 'marie louise', 'hans jørgen', 'hans peter', 'hans henrik', 'hans christian', 'hans ole', 'hans erik', 'jens peter', 'jens christian', 'jens erik', 'jens ole', 'jens ulrik', 'jens kristian', 'poul erik', 'poul henrik', 'poul christian', 'niels christian', 'niels jørgen', 'niels peter', 'niels henrik', 'per ole', 'ole kristian', 'karl erik', 'karl johan', 'kai erik', 'bo erik', 'lars peter', 'lars erik', 'lars henrik', 'ida marie', 'ida louise', 'sofie marie', 'eva marie', 'inger marie', 'inge lise', 'kirsten marie', 'rikke louise', 'mie louise'];
+  // Fornavn kan være dobbelt (Anne Marie), efternavn kan have partikler (von, van, de)
+  function parseName(n) {
+    var t = String(n || '').trim().split(/\s+/).filter(Boolean); if (t.length <= 1) return { fn: t[0] || '', mn: '', en: '' };
+    var fnEnd = t.length >= 3 && NPAIR.indexOf((t[0] + ' ' + t[1]).toLowerCase()) >= 0 ? 2 : 1, enStart = t.length - 1;
+    while (enStart - 1 >= fnEnd && NPART.indexOf(t[enStart - 1].toLowerCase()) >= 0) enStart--;
+    return { fn: t.slice(0, fnEnd).join(' '), mn: t.slice(fnEnd, enStart).join(' '), en: t.slice(enStart).join(' ') };
+  }
   function joinName(fn, mn, en) { return [fn, mn, en].map(function (x) { return String(x || '').trim(); }).filter(Boolean).join(' '); }
   function nameParts(p) { if ((p.fn != null || p.en != null) && joinName(p.fn, p.mn, p.en) === p.navn) return { fn: p.fn || '', mn: p.mn || '', en: p.en || '' }; return parseName(p.navn); }
   function setName(p, fn, mn, en) { p.fn = String(fn || '').trim(); p.mn = String(mn || '').trim(); p.en = String(en || '').trim(); p.navn = joinName(p.fn, p.mn, p.en); }
@@ -2157,7 +2165,7 @@
         edField('Antal medarbejdere', 'ed-medarb', o.medarb) + edAdr(o) + edSel('Bygherretype', 'ed-dev', lkOpts('developer_type', o.dev, 'Ikke angivet'), o.dev) + edSel('Modenhed', 'ed-stage', lkOpts('company_stage', o.ovr ? o.stage : '', 'Automatisk (forslag)'), o.ovr ? o.stage : '') + edSel('Ansvarlig hos os', 'ed-resp', [['', 'Ingen']].concat(colleagues().map(function (q) { return [q.id, q.navn]; })), o.resp || '') + '</div>' + edArea('Noter', 'ed-note', o.note);
     } else if (kind === 'a') {
       o = byId(acts, id); title = 'Rediger aktivitet';
-      h = '<div class="fgrid">' + edField('Titel', 'ed-titel', o.titel) + edField('Dato', 'ed-dato', o.dato, 'date') + edSel('Type', 'ed-type', (TYPER.indexOf(o.type) < 0 ? [o.type] : []).concat(TYPER).map(function (t) { return [t, t]; }), o.type) + edField('Sted', 'ed-sted', o.sted) + edSel('Status', 'ed-status', lkOpts('activity_status', o.status), o.status || (o.dato > TODAY ? 'planned' : 'completed')) + '</div>' + edArea('Noter og intel', 'ed-note', o.note) + '<div id="ed-projs"></div>';
+      h = '<div class="fgrid">' + edField('Titel', 'ed-titel', o.titel) + edField('Dato', 'ed-dato', o.dato, 'date') + edSel('Type', 'ed-type', (TYPER.indexOf(o.type) < 0 ? [o.type] : []).concat(TYPER).map(function (t) { return [t, t]; }), o.type) + edField('Sted', 'ed-sted', o.sted) + edSel('Status', 'ed-status', lkOpts('activity_status', o.status), o.status || (o.dato > TODAY ? 'planned' : 'completed')) + '</div>' + edArea('Generelle noter', 'ed-note', o.note) + '<div id="ed-projs"></div>';
     } else if (kind === 'j') {
       o = byId(projects, id); title = 'Rediger ' + o.navn;
       h = '<div class="fgrid">' + edField('Projektnavn', 'ed-navn', o.navn) + edAdr(o) + '</div><p class="muted">Fase, start, honorar og bygherre ændres direkte i projektets stamdata.</p><div id="ed-roles"></div>';
@@ -2849,5 +2857,5 @@
   }
 
   if (window.__KR_NOBOOT !== true) boot();
-  window.__KR = { intels: intels, effStage: effStage, suggestStage: suggestStage, firmStrength: firmStrength, firmFacts: firmFacts, fwRestHon: fwRestHon, dateAlarms: dateAlarms, fwWarnings: fwWarnings, LK: LK, lkKey: lkKey, lkId: lkId, toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, fws: fws, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
+  window.__KR = { parseName: parseName, intels: intels, effStage: effStage, suggestStage: suggestStage, firmStrength: firmStrength, firmFacts: firmFacts, fwRestHon: fwRestHon, dateAlarms: dateAlarms, fwWarnings: fwWarnings, LK: LK, lkKey: lkKey, lkId: lkId, toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, fws: fws, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
 })();
