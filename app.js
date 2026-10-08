@@ -587,9 +587,12 @@
     if (firmId) np.emp.push({ firm: firmId, titel: $('#pn-titel').value.trim(), fra: fra, til: null });
     if (em) np.email = em;
     if ($('#pn-tel').value.trim()) np.tel = $('#pn-tel').value.trim();
+    var li0 = liUrl($('#pn-li').value);
+    if (!liOk(li0)) { err.textContent = 'LinkedIn-adressen skal pege på linkedin.com.'; return; }
+    if (li0) np.li = li0;
     persons.push(np);
     sel.p = np.id; open.p = true;
-    ['pn-fn', 'pn-mn', 'pn-en', 'pn-titel', 'pn-email', 'pn-tel', 'pn-tags', 'pn-nn'].forEach(function (id) { $('#' + id).value = ''; });
+    ['pn-fn', 'pn-mn', 'pn-en', 'pn-titel', 'pn-email', 'pn-tel', 'pn-li', 'pn-tags', 'pn-nn'].forEach(function (id) { $('#' + id).value = ''; });
     $('#pn-firm').value = '0'; $('#pn-newbox').hidden = true; $('#form-p').hidden = true;
     ['q-p'].forEach(function (id) { $('#' + id).value = ''; }); $('#k-p').value = ''; $('#t-p').value = ''; $('#l-p').value = '';
     fillFuPersonSelects(); renderAll(); showTab('p');
@@ -707,6 +710,14 @@
       '<p class="muted">' + (c ? 'Det nuværende job afsluttes i startmåneden og ligger fortsat i historikken.' : 'Personen får sin første registrerede ansættelse.') + '</p>' +
       '<div class="actions"><button type="submit" class="btn primary small">Gem jobskifte</button></div></form></details>';
   }
+  function liUrl(s) {
+    s = String(s || '').trim(); if (!s) return '';
+    if (/^https?:\/\//i.test(s)) return s;
+    if (/^(www\.)?linkedin\.com\//i.test(s)) return 'https://' + s.replace(/^www\./i, 'www.');
+    if (/^[\w%\-.]+$/.test(s)) return 'https://www.linkedin.com/in/' + s.replace(/^@/, '') + '/';
+    return s;
+  }
+  function liOk(s) { return !s || /^https?:\/\/([\w-]+\.)?linkedin\.com\//i.test(s); }
   function personDetail0(p) {
     if (!p) return '<p class="empty">Vælg en person.</p>';
     var f = firmOf(p), as = personActs(p.id);
@@ -718,6 +729,7 @@
     h += '<section><h3>Kontakt</h3><div class="kv">' +
       (f && f.adr ? '<span class="k">Arbejdssted</span><span class="v">' + esc(f.adr.vej) + ', ' + esc(f.adr.post) + ' ' + esc(f.adr.by) + '</span><button type="button" class="btn" data-map="' + f.id + '">Vis på kort</button>' : '') +
       (email(p) ? '<span class="k">E-mail</span><span class="v">' + esc(email(p)) + '</span><button type="button" class="btn" data-copy="' + esc(email(p)) + '">Kopiér</button>' : '') +
+      '<span class="k">LinkedIn</span><span class="v">' + (p.li ? '<a href="' + esc(p.li) + '" target="_blank" rel="noopener noreferrer">' + esc(p.li.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '')) + '</a>' : '<span class="muted">Ikke angivet</span>') + '</span>' + (p.li ? '<button type="button" class="btn" data-copy="' + esc(p.li) + '">Kopiér</button>' : '<span></span>') +
       '<span class="k">Telefon</span><span class="v">' + esc(tel(p)) + '</span><button type="button" class="btn" data-copy="' + esc(tel(p)) + '">Kopiér</button>' +
       '<span class="k">Job bekræftet</span><span class="v">' + fmtMonth(p.bek) + (stale(p) ? '<span class="badge warn">Over 18 mdr.</span>' : '') + '</span><button type="button" class="btn" data-confirm="' + p.id + '">Bekræft nu</button>' +
       '<span class="k">Sidst mødt</span><span class="v">' + (as.length ? fmtDate(as[0].dato) : 'Ikke mødt endnu') + '</span><span></span>' +
@@ -1412,7 +1424,7 @@
       var tn = lkK('employee_title', v.title_id), bek = (v.created_at || '').slice(0, 7) || TODAY.slice(0, 7);
       var p = { id: numOf('p', v.id), navn: joinName(v.first_name, v.middle_name, v.last_name), fn: v.first_name || '', mn: v.middle_name || '', en: v.last_name || '', tags: [], bek: bek, nej: false, act: v.active !== false, _emp: true, ini: v.initials || '', etitel: tn,
         emp: own ? [{ firm: own.id, titel: tn, fra: bek, til: null, _id: 'emp-' + v.id, typ: 'employee', fkt: '', prim: true }] : [] };
-      if (v.email) p.email = v.email; if (v.phone) p.tel = v.phone; if (v.notes) p.note = v.notes;
+      if (v.email) p.email = v.email; if (v.phone) p.tel = v.phone; if (v.linkedin) p.li = v.linkedin; if (v.notes) p.note = v.notes;
       persons.push(p);
     });
     D.label_link.forEach(function (k) {
@@ -1507,7 +1519,7 @@
       var id = uidOf('p', p.id), c = cur(p), nm = nameParts(p);
       if (isColleague(p)) {
         var tt = c ? c.titel : (p.etitel || '');
-        R.employee[id] = { id: id, first_name: nm.fn, middle_name: qd(nm.mn), last_name: qd(nm.en), initials: qd(p.ini) || initialsOf(p), title_id: qd(tt) ? lkId('employee_title', tt, true) : null, user_id: null, email: qd(p.email), phone: qd(p.tel), notes: qd(p.note), active: p.act !== false };
+        R.employee[id] = { id: id, first_name: nm.fn, middle_name: qd(nm.mn), last_name: qd(nm.en), initials: qd(p.ini) || initialsOf(p), title_id: qd(tt) ? lkId('employee_title', tt, true) : null, user_id: null, email: qd(p.email), phone: qd(p.tel), linkedin: qd(p.li), notes: qd(p.note), active: p.act !== false };
         return;
       }
       R.contact[id] = { id: id, first_name: nm.fn, middle_name: qd(nm.mn), last_name: qd(nm.en), email: qd(p.email), phone: qd(p.tel), linkedin: qd(p.li), notes: qd(p.note), acquainted_since: dm(p.bek), no_invitation: !!p.nej, active: p.act !== false };
@@ -1828,6 +1840,7 @@
     { k: 'titel', n: 'Titel', al: ['titel', 'title', 'stilling', 'jobtitle', 'jobtitel', 'position'] },
     { k: 'email', n: 'E-mail', al: ['email', 'mail', 'emailadresse', 'emailaddress', 'e-mail'] },
     { k: 'tel', n: 'Telefon', al: ['telefon', 'tlf', 'mobil', 'phone', 'mobile', 'telefonnummer', 'mobiltelefon', 'direkte'] },
+    { k: 'li', n: 'LinkedIn', al: ['linkedin', 'linkedinurl', 'linkedinprofil', 'linkedinprofile', 'linkedinlink'] },
     { k: 'firma', n: 'Virksomhed', al: ['virksomhed', 'firma', 'organisation', 'company', 'organization', 'arbejdsplads', 'firmanavn', 'virksomhedsnavn'] },
     { k: 'cvr', n: 'CVR', al: ['cvr', 'cvrnummer', 'cvrnr', 'vat'] },
     { k: 'vej', n: 'Adresse', al: ['adresse', 'vej', 'gade', 'address', 'street', 'vejnavn'] },
@@ -1946,7 +1959,7 @@
           }
         })(f, cvr, adr, hasAdr, fg(r, 'web').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, ''));
       }
-      var em = fg(r, 'email').toLowerCase(), tel = fg(r, 'tel'), ti = fg(r, 'titel'), nt = fg(r, 'noter');
+      var em = fg(r, 'email').toLowerCase(), tel = fg(r, 'tel'), ti = fg(r, 'titel'), nt = fg(r, 'noter'), li = liUrl(fg(r, 'li')); if (!liOk(li)) li = '';
       var tags = fg(r, 'maerker').split(/[,;|]/).map(function (t) { return t.trim(); }).filter(Boolean);
       var ex = (em && pEmail[em]) || pKey[normH(name) + '|' + fk(f)];
       if (ex) {
@@ -1955,13 +1968,14 @@
           res.fills.push(function () {
             if (em && !ex.email) ex.email = em;
             if (tel && !ex.tel) ex.tel = tel;
+            if (li && !ex.li) ex.li = li;
             tags.forEach(function (t) { if (ex.tags.indexOf(t) < 0) ex.tags.push(t); });
             var c = cur(ex); if (c && ti && !c.titel) c.titel = ti;
           });
         }
         return;
       }
-      var np = { _tmpP: true, navn: name, fn: pt.fn.trim(), mn: pt.mn.trim(), en: pt.en.trim(), firm: f, titel: ti, email: em ? fg(r, 'email') : '', tel: tel, tags: tags, note: nt };
+      var np = { _tmpP: true, navn: name, fn: pt.fn.trim(), mn: pt.mn.trim(), en: pt.en.trim(), firm: f, titel: ti, email: em ? fg(r, 'email') : '', tel: tel, li: li, tags: tags, note: nt };
       res.newPersons.push(np);
       if (em) pEmail[em] = np;
       pKey[normH(name) + '|' + fk(f)] = np;
@@ -1983,7 +1997,7 @@
     pl.newPersons.forEach(function (x) {
       var p = { id: nextId(persons), navn: x.navn, fn: x.fn, mn: x.mn, en: x.en, tags: x.tags, bek: month, emp: [], nej: false };
       if (x.firm) p.emp.push({ firm: x.firm.id, titel: x.titel, fra: month, til: null });
-      if (x.email) p.email = x.email; if (x.tel) p.tel = x.tel; if (x.note) p.note = x.note;
+      if (x.email) p.email = x.email; if (x.tel) p.tel = x.tel; if (x.li) p.li = x.li; if (x.note) p.note = x.note;
       persons.push(p);
     });
     pl.fills.forEach(function (fn) { fn(); });
@@ -2232,7 +2246,8 @@
       }
       if (em) o.email = em; else delete o.email;
       if (v('ed-tel')) o.tel = v('ed-tel'); else delete o.tel;
-      if (v('ed-li')) o.li = v('ed-li'); else delete o.li;
+      var li1 = liUrl(v('ed-li')); if (!liOk(li1)) { err.textContent = 'LinkedIn-adressen skal pege på linkedin.com.'; return; }
+      if (li1) o.li = li1; else delete o.li;
       if (v('ed-note')) o.note = v('ed-note'); else delete o.note;
       o.tags = v('ed-tags').split(',').map(function (t) { return t.trim(); }).filter(Boolean);
     } else if (ed.kind === 'f') {
