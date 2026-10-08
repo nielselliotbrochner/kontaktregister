@@ -20,7 +20,7 @@
 
   var TYPO = ['Renovering', 'Skoler og uddannelse', 'Idræt', 'Kultur', 'Boliger (private)', 'Boliger (almene)', 'Kontor', 'Laboratorier', 'Fredede bygninger', 'Hospitaler og sundhed', 'Industri og farma', 'Butikker', 'Hoteller'];
   var TYPO_KAT = ['arkitekt', 'entreprenoer'];
-  var firms = [], persons = [], projects = [], acts = [], followups = [], fws = [];
+  var firms = [], persons = [], projects = [], acts = [], followups = [], fws = [], intels = [];
 
   // Datohjælp
   function fmtDate(iso) { return new Date(iso + 'T12:00:00').toLocaleDateString('da-DK', { day: 'numeric', month: 'short', year: 'numeric' }); }
@@ -737,6 +737,7 @@
     h += '<section><h3>Karriere</h3>' + empList(p) + jobForm(p) + '</section>';
     h += listChips(p);
     h += fuSection('p', p.id);
+    if (!isColleague(p)) h += intelSection('p', p);
     h += '<section><h3>Nævnte projekter</h3>' + (projIds.length ? '<ul class="plist">' + projIds.map(function (id) { return projRow(byId(projects, id), ''); }).join('') + '</ul>' : '<p class="muted">Ingen projekter knyttet endnu.</p>') + '</section>';
     if (!isColleague(p)) {
       h += '<section><h3>Kendes af kolleger</h3>' + (cols.length ? '<div class="chips">' + cols.map(function (c) { var q = byId(persons, c); return '<span class="chip">' + go('p', q.id) + esc(q.navn) + '</button></span>'; }).join('') + '</div>' : '<p class="muted">Ingen kolleger har været med på en aktivitet.</p>') + '</section>';
@@ -804,14 +805,16 @@
   // Virksomheder
   function renderFirms() {
     var q = $('#q-f').value.trim().toLowerCase(), kat = $('#k-f').value, ty = $('#y-f').value;
+    var mf = $('#m-f'), mv = mf.value; mf.innerHTML = '<option value="">Alle modenheder</option>' + lkNames('company_stage', true).map(function (x) { return '<option value="' + esc(lkKey(x)) + '">' + esc(x.name) + '</option>'; }).join(''); mf.value = mv; mv = mf.value;
     var list = firms.filter(function (f) {
       if (kat && f.kat !== kat) return false;
+      if (mv && (f.kat === 'egen' || effStage(f) !== mv)) return false;
       if (ty !== '' && lvl(f, +ty) < 4) return false;
       return !q || (f.navn + ' ' + f.by + ' ' + f.sub + ' ' + f.note).toLowerCase().indexOf(q) >= 0;
     }).sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); });
     $('#c-f').textContent = list.length + ' af ' + firms.length;
     $('#list-f').innerHTML = list.length ? list.map(function (f) {
-      return '<li><button type="button" class="item" data-go="f:' + f.id + '" aria-current="' + (sel.f === f.id) + '"><span class="t">' + esc(f.navn) + '</span><span class="d">' + firmPeople(f.id).length + ' personer</span><span class="s">' + esc(f.sub) + (f.by ? ' · ' + esc(f.by) : '') + '</span>' + (hasTypo(f) && strongText(f).length ? '<span class="s">Stærk: ' + esc(strongText(f).join(', ')) + '</span>' : '') + '</button></li>';
+      return '<li><button type="button" class="item" data-go="f:' + f.id + '" aria-current="' + (sel.f === f.id) + '"><span class="t">' + esc(f.navn) + '</span><span class="d">' + firmPeople(f.id).length + ' personer</span><span class="s">' + esc(f.sub) + (f.by ? ' · ' + esc(f.by) : '') + (f.kat !== 'egen' ? ' · ' + esc(lkName('company_stage', effStage(f))) + ' · ' + firmStrength(f).label : '') + '</span>' + (hasTypo(f) && strongText(f).length ? '<span class="s">Stærk: ' + esc(strongText(f).join(', ')) + '</span>' : '') + '</button></li>';
     }).join('') : '<li class="empty">Ingen virksomheder matcher.</li>';
     $('#detail-f').innerHTML = firmDetail(byId(firms, sel.f));
     $('#split-f').classList.toggle('open', open.f);
@@ -824,7 +827,8 @@
     as.forEach(function (a) { a.proj.forEach(function (id) { if (mentioned.indexOf(id) < 0) mentioned.push(id); }); });
     var other = mentioned.filter(function (id) { return !own.some(function (p) { return p.id === id; }); });
     var h = '<button type="button" class="btn back" data-back="f">‹ Tilbage til listen</button>';
-    h += '<div><h2>' + esc(f.navn) + '</h2><p class="muted">' + esc(f.sub) + '</p></div>';
+    h += '<div><h2>' + esc(f.navn) + (f.kat === 'egen' ? '' : stageBadge(f)) + '</h2><p class="muted">' + esc(f.sub) + '</p></div>';
+    if (f.kat !== 'egen') h += relationSection(f);
     h += '<section><h3>Stamdata</h3><div class="grid3">' +
       '<span><span class="k">Type</span>' + esc(KAT[f.kat]) + '</span><span><span class="k">By</span>' + (f.by ? esc(f.by) : 'Ikke angivet') + '</span><span><span class="k">CVR</span>' + (f.cvr ? esc(f.cvr) : 'Ikke angivet') + '</span>' +
       '<span><span class="k">Adresse</span>' + (f.adr ? esc(f.adr.vej) + ', ' + esc(f.adr.post) + ' ' + esc(f.adr.by) + ' <button type="button" class="link" data-map="' + f.id + '">Vis på kort</button>' : 'Ikke angivet') + '</span>' +
@@ -842,6 +846,7 @@
         return '<li>' + go('p', p.id) + esc(p.navn) + '</button><span class="muted">' + esc(e.titel) + ' · ' + fmtMonth(e.fra) + ' til ' + (e.til ? fmtMonth(e.til) : 'nu') + (now ? ' · nu hos ' + esc(now.navn) : '') + '</span></li>';
       }).join('') + '</ul></section>';
     }
+    if (f.kat !== 'egen') h += intelSection('f', f);
     h += '<section><h3>Projekter</h3>' + ((own.length || other.length) ? '<ul class="plist">' +
       own.map(function (p) { return projRow(p, 'Bygherre'); }).join('') +
       other.map(function (id) { return projRow(byId(projects, id), 'Nævnt af kontakter her'); }).join('') + '</ul>' : '<p class="muted">Ingen projekter knyttet endnu.</p>') + '</section>';
@@ -1244,7 +1249,7 @@
 
   ['v-k', 'q-k', 'k-k', 'l-k', 'r-k', 'mt-k', 'ms-k'].forEach(function (id) { $('#' + id).addEventListener('input', function () { renderMap(id !== 'r-k'); }); });
   ['q-p', 'k-p', 't-p', 'l-p', 's-p'].forEach(function (id) { $('#' + id).addEventListener('input', renderPersons); });
-  ['q-f', 'k-f', 'y-f'].forEach(function (id) { $('#' + id).addEventListener('input', renderFirms); });
+  ['q-f', 'k-f', 'y-f', 'm-f'].forEach(function (id) { $('#' + id).addEventListener('input', renderFirms); });
   ['q-a', 'k-a', 'p-a', 'g-a'].forEach(function (id) { $('#' + id).addEventListener('input', renderActs); });
   $('#v-o').addEventListener('input', renderFu);
   $('#new-a').addEventListener('click', function () { var f = $('#form-a'); f.hidden = !f.hidden; if (!f.hidden) $('#f-title').focus(); });
@@ -1294,7 +1299,7 @@
   /* ===================== Datalag: Supabase ===================== */
   var CFG = window.KR_CONFIG || {};
   var SB = null, ME = null, lastRows = null, loadedAt = 0, syncBusy = false, syncTimer = null, syncFail = 0, pending = false, booted = false;
-  var UU = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {}, w: {} }, NN = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {}, w: {} }, CNT = { f: 0, p: 0, j: 0, a: 0, o: 0, l: 0, w: 0 };
+  var UU = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {}, w: {}, i: {} }, NN = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {}, w: {}, i: {} }, CNT = { f: 0, p: 0, j: 0, a: 0, o: 0, l: 0, w: 0, i: 0 };
   var TAGU = {};
 
   /* ---------- Opslagstabeller ---------- */
@@ -1376,7 +1381,7 @@
     setStatus('busy', 'Henter data…');
     var T = [['company', ['created_at', 'id']], ['employee', ['created_at', 'id']], ['contact', ['created_at', 'id']], ['contact_company', ['id']], ['framework', ['created_at', 'id']], ['project', ['created_at', 'id']], ['project_log', ['changed_at', 'id']],
       ['roles', ['created_at', 'id']], ['activity', ['created_at', 'id']], ['activity_contact', ['activity_id', 'contact_id']], ['activity_employee', ['activity_id', 'employee_id']], ['activity_project', ['activity_id', 'project_id']],
-      ['followup', ['due_date', 'id']], ['company_typology', ['company_id', 'typology_id']], ['label', ['name', 'id']], ['label_link', ['id']], ['attachment', ['created_at', 'id']]];
+      ['followup', ['due_date', 'id']], ['company_typology', ['company_id', 'typology_id']], ['label', ['name', 'id']], ['label_link', ['id']], ['attachment', ['created_at', 'id']], ['intel', ['intel_date', 'created_at']]];
     LKT.forEach(function (t) { T.push([t, ['sort_order', 'id']]); });
     return Promise.all(T.map(function (t) { return fetchAll(t[0], t[1]); })).then(function (r) {
       var D = {}; T.forEach(function (t, i) { D[t[0]] = r[i]; });
@@ -1386,8 +1391,8 @@
   }
 
   function applyData(D) {
-    [firms, persons, projects, acts, followups, lists, fws].forEach(function (a) { a.length = 0; });
-    ['f', 'p', 'j', 'a', 'o', 'l', 'w'].forEach(function (k) { UU[k] = {}; NN[k] = {}; CNT[k] = 0; });
+    [firms, persons, projects, acts, followups, lists, fws, intels].forEach(function (a) { a.length = 0; });
+    ['f', 'p', 'j', 'a', 'o', 'l', 'w', 'i'].forEach(function (k) { UU[k] = {}; NN[k] = {}; CNT[k] = 0; });
     TAGU = {};
     LKT.forEach(function (t) {
       LK[t] = (D[t] || []).map(function (r) {
@@ -1399,7 +1404,7 @@
     D.company.forEach(function (v) {
       var kat = lkK('company_category', v.category_id);
       var f = { id: numOf('f', v.id), navn: v.name, kat: kat, sub: v.subcategory || KAT[kat] || '', by: v.city || '', cvr: v.cvr || '', medarb: v.employee_count, web: v.web || '', note: v.notes || '', typ: {},
-        dev: lkK('developer_type', v.developer_type_id), stage: lkK('company_stage', v.stage_id), resp: v.responsible_id ? numOf('p', v.responsible_id) : 0, adr2: v.address2 || '', land: v.country || 'Danmark' };
+        dev: lkK('developer_type', v.developer_type_id), stage: lkK('company_stage', v.stage_id), ovr: !!v.stage_override, resp: v.responsible_id ? numOf('p', v.responsible_id) : 0, adr2: v.address2 || '', land: v.country || 'Danmark' };
       if (v.lat != null && v.lng != null) f.adr = { vej: v.address1 || '', post: v.postal_code || '', by: v.city || '', lat: v.lat, lng: v.lng };
       else if (v.address1 || v.postal_code) f.adrx = { vej: v.address1 || '', post: v.postal_code || '', by: v.city || '' };
       firms.push(f);
@@ -1491,6 +1496,10 @@
       var o = v.activity_id ? byId(acts, numOf('a', v.activity_id)) : byId(projects, numOf('j', v.project_id)); if (!o) return;
       (o.files = o.files || []).push({ id: v.id, navn: v.file_name, sti: v.path, str: v.size, mime: v.mime_type || '', dato: (v.created_at || '').slice(0, 10) });
     });
+    (D.intel || []).forEach(function (v) {
+      intels.push({ id: numOf('i', v.id), firm: v.company_id ? numOf('f', v.company_id) : 0, person: v.contact_id ? numOf('p', v.contact_id) : 0, dato: v.intel_date, titel: v.title, url: v.source_url || '', note: v.note || '', tekst: v.intel_text || '',
+        file: v.file_path ? { sti: v.file_path, navn: v.file_name || 'fil', str: v.file_size, mime: v.file_mime || '' } : null });
+    });
     D.followup.forEach(function (v) {
       followups.push({ id: numOf('o', v.id), tekst: v.task, forfald: v.due_date, person: v.contact_id ? numOf('p', v.contact_id) : 0, resp: v.employee_id ? numOf('p', v.employee_id) : 0, act: numOf('a', v.activity_id), proj: numOf('j', v.project_id), done: !!v.done_at, doneAt: v.done_at || null, varsel: v.warning_days || 0 });
     });
@@ -1498,17 +1507,19 @@
     lastRows = toRows();
     // sikr at forventet primær-markering svarer til databasen (unikt indeks)
     D.contact_company.forEach(function (e) { if (lastRows.contact_company[e.id]) lastRows.contact_company[e.id].is_primary = !!e.is_primary; });
+    // modenhed beregnes af appen: gem forslaget i databasen, hvis det afviger
+    D.company.forEach(function (v) { if (lastRows.company[v.id]) lastRows.company[v.id].stage_id = v.stage_id || null; });
   }
 
   /* ---------- Model til rækker ---------- */
   function toRows() {
-    var R = { employee: {}, company: {}, contact: {}, contact_company: {}, framework: {}, project: {}, roles: {}, activity: {}, activity_contact: {}, activity_employee: {}, activity_project: {}, followup: {}, company_typology: {}, label: {}, label_link: {} };
+    var R = { employee: {}, company: {}, contact: {}, contact_company: {}, framework: {}, project: {}, roles: {}, activity: {}, activity_contact: {}, activity_employee: {}, activity_project: {}, followup: {}, company_typology: {}, label: {}, label_link: {}, intel: {} };
     LKT.forEach(function (t) { R[t] = {}; });
     firms.forEach(function (f) {
       var a = f.adr || f.adrx || null, id = uidOf('f', f.id);
       R.company[id] = { id: id, name: f.navn, category_id: lkId('company_category', f.kat) || lkId('company_category', 'andet'), cvr: qd(f.cvr), subcategory: qd(f.sub), employee_count: f.medarb == null || f.medarb === '' || isNaN(+f.medarb) ? null : Math.round(+f.medarb), web: qd(f.web),
         address1: a ? qd(a.vej) : null, postal_code: a ? qd(a.post) : null, city: a ? qd(a.by) : qd(f.by), lat: f.adr ? f.adr.lat : null, lng: f.adr ? f.adr.lng : null, notes: qd(f.note),
-        address2: qd(f.adr2), country: f.land || 'Danmark', developer_type_id: f.dev ? lkId('developer_type', f.dev) : null, stage_id: f.stage ? lkId('company_stage', f.stage) : null, responsible_id: null };
+        address2: qd(f.adr2), country: f.land || 'Danmark', developer_type_id: f.dev ? lkId('developer_type', f.dev) : null, stage_id: lkId('company_stage', effStage(f)), stage_override: !!f.ovr, responsible_id: null };
       Object.keys(f.typ || {}).forEach(function (k) {
         var s = f.typ[k];
         if (s >= 1 && s <= 5) R.company_typology[id + '|' + (+k + 1)] = { company_id: id, typology_id: +k + 1, score: s };
@@ -1579,6 +1590,12 @@
         R.roles[x.id] = { id: x.id, company_id: fu, contact_id: ku, project_id: null, framework_id: id, role_id: lkId('participant_role', x.role, true), is_winner: !!x.win, notes: qd(x.note) };
       });
     });
+    intels.forEach(function (x) {
+      var id = uidOf('i', x.id), cu = x.firm ? uidOf('f', x.firm) : null, ku = x.person ? uidOf('p', x.person) : null;
+      if (cu && !R.company[cu]) cu = null; if (ku && !R.contact[ku]) ku = null;
+      if (!cu && !ku) return;
+      R.intel[id] = { id: id, company_id: cu, contact_id: cu ? null : ku, intel_date: x.dato, title: x.titel, source_url: qd(x.url), note: qd(x.note), file_name: x.file ? x.file.navn : null, file_path: x.file ? x.file.sti : null, file_size: x.file ? nn(x.file.str) : null, file_mime: x.file ? qd(x.file.mime) : null, intel_text: qd(x.tekst) };
+    });
     acts.forEach(function (a) {
       var id = uidOf('a', a.id), via = a.via && a.via.length ? uidOf('p', a.via[0]) : null;
       R.activity[id] = { id: id, date: a.dato, title: a.titel, notes: qd(a.note), place: qd(a.sted), attended: !!a.me, type_id: lkId('activity_type', a.type, true) || lkId('activity_type', 'andet'),
@@ -1611,7 +1628,7 @@
   }
 
   /* ---------- Diff og skrivning ---------- */
-  var ORDER = LKT.concat(['employee', 'company', 'contact', 'contact_company', 'framework', 'project', 'roles', 'activity', 'activity_contact', 'activity_employee', 'activity_project', 'followup', 'company_typology', 'label', 'label_link']);
+  var ORDER = LKT.concat(['employee', 'company', 'contact', 'contact_company', 'intel', 'framework', 'project', 'roles', 'activity', 'activity_contact', 'activity_employee', 'activity_project', 'followup', 'company_typology', 'label', 'label_link']);
   var PKS = { activity_contact: ['activity_id', 'contact_id'], activity_employee: ['activity_id', 'employee_id'], activity_project: ['activity_id', 'project_id'], company_typology: ['company_id', 'typology_id'], label_link: ['label_id', 'contact_id'] };
 
   function diff(oldR, newR) {
@@ -2137,7 +2154,7 @@
     } else if (kind === 'f') {
       o = byId(firms, id); title = 'Rediger ' + o.navn;
       h = '<div class="fgrid">' + edField('Navn', 'ed-navn', o.navn) + edSel('Type', 'ed-kat', Object.keys(KAT).map(function (k) { return [k, KAT[k]]; }), o.kat) + edField('CVR', 'ed-cvr', o.cvr) + edField('Hjemmeside', 'ed-web', o.web) +
-        edField('Antal medarbejdere', 'ed-medarb', o.medarb) + edAdr(o) + edSel('Bygherretype', 'ed-dev', lkOpts('developer_type', o.dev, 'Ikke angivet'), o.dev) + edSel('Modenhed', 'ed-stage', lkOpts('company_stage', o.stage, 'Ikke angivet'), o.stage) + edSel('Ansvarlig hos os', 'ed-resp', [['', 'Ingen']].concat(colleagues().map(function (q) { return [q.id, q.navn]; })), o.resp || '') + '</div>' + edArea('Noter', 'ed-note', o.note);
+        edField('Antal medarbejdere', 'ed-medarb', o.medarb) + edAdr(o) + edSel('Bygherretype', 'ed-dev', lkOpts('developer_type', o.dev, 'Ikke angivet'), o.dev) + edSel('Modenhed', 'ed-stage', lkOpts('company_stage', o.ovr ? o.stage : '', 'Automatisk (forslag)'), o.ovr ? o.stage : '') + edSel('Ansvarlig hos os', 'ed-resp', [['', 'Ingen']].concat(colleagues().map(function (q) { return [q.id, q.navn]; })), o.resp || '') + '</div>' + edArea('Noter', 'ed-note', o.note);
     } else if (kind === 'a') {
       o = byId(acts, id); title = 'Rediger aktivitet';
       h = '<div class="fgrid">' + edField('Titel', 'ed-titel', o.titel) + edField('Dato', 'ed-dato', o.dato, 'date') + edSel('Type', 'ed-type', (TYPER.indexOf(o.type) < 0 ? [o.type] : []).concat(TYPER).map(function (t) { return [t, t]; }), o.type) + edField('Sted', 'ed-sted', o.sted) + edSel('Status', 'ed-status', lkOpts('activity_status', o.status), o.status || (o.dato > TODAY ? 'planned' : 'completed')) + '</div>' + edArea('Noter og intel', 'ed-note', o.note) + '<div id="ed-projs"></div>';
@@ -2148,7 +2165,7 @@
     if (kind === 'fnew') {
       title = 'Ny virksomhed';
       h = '<div class="fgrid">' + edField('Navn', 'ed-navn', '') + edSel('Type', 'ed-kat', Object.keys(KAT).filter(function (k) { return k !== 'egen'; }).map(function (k) { return [k, KAT[k]]; }), 'bygherre') + edField('CVR', 'ed-cvr', '') + edField('Hjemmeside', 'ed-web', '') +
-        edField('Antal medarbejdere', 'ed-medarb', '') + edAdr(null) + edSel('Bygherretype', 'ed-dev', lkOpts('developer_type', '', 'Ikke angivet'), '') + edSel('Modenhed', 'ed-stage', lkOpts('company_stage', '', 'Ikke angivet'), '') + edSel('Ansvarlig hos os', 'ed-resp', [['', 'Ingen']].concat(colleagues().map(function (q) { return [q.id, q.navn]; })), '') + '</div>' + edArea('Noter', 'ed-note', '');
+        edField('Antal medarbejdere', 'ed-medarb', '') + edAdr(null) + edSel('Bygherretype', 'ed-dev', lkOpts('developer_type', '', 'Ikke angivet'), '') + edSel('Modenhed', 'ed-stage', lkOpts('company_stage', '', 'Automatisk (forslag)'), '') + edSel('Ansvarlig hos os', 'ed-resp', [['', 'Ingen']].concat(colleagues().map(function (q) { return [q.id, q.navn]; })), '') + '</div>' + edArea('Noter', 'ed-note', '');
     }
     ed = { kind: kind, id: id }; $('#ed-del').hidden = false;
     if (kind === 'p' && !isColleague(o)) { ed.emps = o.emp.map(function (e) { return { firm: e.firm, titel: e.titel, fra: e.fra, til: e.til, typ: e.typ || 'employee', fkt: e.fkt || '', _id: e._id }; }); var pc = cur(o); ed.prim = pc ? o.emp.indexOf(pc) : -1; }
@@ -2229,7 +2246,7 @@
       var kt = $('#ed-kat').value;
       var nfm = { id: nextId(firms), navn: nn, kat: kt, sub: KAT[kt] || '', by: v('ed-by'), cvr: v('ed-cvr'), medarb: md ? parseInt(md.replace(/\./g, ''), 10) : null, web: v('ed-web').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, ''), note: v('ed-note'), typ: {} };
       if (v('ed-vej') || v('ed-post') || v('ed-by')) nfm.adrx = { vej: v('ed-vej'), post: v('ed-post'), by: v('ed-by') };
-      nfm.dev = $('#ed-dev').value; nfm.stage = $('#ed-stage').value; nfm.resp = +$('#ed-resp').value || 0;
+      nfm.dev = $('#ed-dev').value; nfm.stage = $('#ed-stage').value; nfm.ovr = !!nfm.stage; nfm.resp = +$('#ed-resp').value || 0;
       firms.push(nfm); sel.f = nfm.id; open.f = true;
       closeEdit(); setupForm(); renderAll(); showTab('f'); toast(nn + ' er tilføjet. Gemmer…'); schedule(100); return;
     }
@@ -2256,7 +2273,7 @@
       var nk = $('#ed-kat').value; if (nk !== o.kat) { if (o.sub === KAT[o.kat]) o.sub = KAT[nk]; o.kat = nk; }
       o.navn = fn; o.cvr = v('ed-cvr'); o.web = v('ed-web').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, ''); o.note = v('ed-note');
       o.medarb = med ? parseInt(med.replace(/\./g, ''), 10) : null;
-      o.dev = $('#ed-dev').value; o.stage = $('#ed-stage').value; o.resp = +$('#ed-resp').value || 0;
+      o.dev = $('#ed-dev').value; o.stage = $('#ed-stage').value; o.ovr = !!o.stage; o.resp = +$('#ed-resp').value || 0;
       edAddr(o, 'adr'); if (v('ed-by')) o.by = v('ed-by');
     } else if (ed.kind === 'a') {
       o = byId(acts, ed.id); if (!v('ed-titel')) { err.textContent = 'Skriv en titel.'; return; } if (!v('ed-dato')) { err.textContent = 'Vælg en dato.'; return; }
@@ -2274,6 +2291,7 @@
     if (kind === 'p') name = byId(persons, id).navn; else if (kind === 'f') name = byId(firms, id).navn; else if (kind === 'a') name = byId(acts, id).titel; else name = byId(projects, id).navn;
     if (!confirm('Slet "' + name + '"? Det kan ikke fortrydes.')) return;
     if (kind === 'a') purgeFiles(byId(acts, id)); if (kind === 'j') purgeFiles(byId(projects, id));
+    if (kind === 'p' || kind === 'f') purgeIntel(kind, id);
     function without(arr, fn) { for (var i = arr.length - 1; i >= 0; i--) if (fn(arr[i])) arr.splice(i, 1); }
     if (kind === 'p') {
       without(persons, function (x) { return x.id === id; }); without(followups, function (x) { return x.person === id; }); followups.forEach(function (x) { if (x.resp === id) x.resp = 0; });
@@ -2625,6 +2643,197 @@
     }
   });
 
+  /* ===================== Modenhed, relationsstyrke og intel ===================== */
+  var STAGES = ['unknown', 'known', 'active_dialogue', 'customer', 'strategic_partner', 'dormant'];
+
+  // Samler tallene, som både modenhed og styrke bygger på
+  function firmFacts(f) {
+    var as = firmActs(f.id), past = as.filter(function (a) { return a.dato <= TODAY; });
+    var d12 = addDays(TODAY, -365), d24 = addDays(TODAY, -730);
+    var last = past.length ? past[0].dato : '';
+    var n12 = past.filter(function (a) { return a.dato > d12; }).length, nPrev = past.filter(function (a) { return a.dato > d24 && a.dato <= d12; }).length;
+    var cs = {}, cs12 = {};
+    past.forEach(function (a) {
+      a.people.forEach(function (id) {
+        var p = byId(persons, id), c = p && firmAt(p, a.dato);
+        if (!p || isColleague(p) || !c || c.id !== f.id) return;
+        cs[id] = 1; if (a.dato > d12) cs12[id] = 1;
+      });
+    });
+    var ps = projects.filter(function (p) { return p.bygherre === f.id; }), fw = fws.filter(function (w) { return w.bygherre === f.id; });
+    return {
+      acts: past.length, last: last, n12: n12, nPrev: nPrev, contacts: Object.keys(cs).map(Number), contacts12: Object.keys(cs12).map(Number),
+      won: ps.filter(function (p) { return p.fase === 'vundet'; }).length, wonFw: fw.filter(function (w) { return w.fase === 'vundet'; }).length,
+      openProj: ps.filter(function (p) { return ['kval', 'pq', 'tilbud'].indexOf(p.fase) >= 0; }).length, openFw: fw.filter(function (w) { return w.fase === 'pq' || w.fase === 'tilbud'; }).length,
+      projects: ps.length
+    };
+  }
+  // Foreslået modenhed med begrundelse
+  function suggestStage(f, k) {
+    k = k || firmFacts(f);
+    var recent = k.last && k.last > addDays(TODAY, -365), cust = k.won > 0 || k.wonFw > 0;
+    if (f.kat === 'egen') return { key: 'unknown', why: 'Egen virksomhed' };
+    if (cust && !recent) return { key: 'dormant', why: (k.last ? 'Kunde uden aktivitet siden ' + fmtDate(k.last) : 'Kunde uden registreret aktivitet') + ' (over 12 måneder)' };
+    if ((k.wonFw > 0 || k.won >= 3) && k.contacts.length >= 3) return { key: 'strategic_partner', why: (k.wonFw > 0 ? 'Vundet rammeaftale' : k.won + ' vundne projekter') + ' og ' + k.contacts.length + ' kontakter med aktivitet' };
+    if (cust) return { key: 'customer', why: k.won + (k.won === 1 ? ' vundet projekt' : ' vundne projekter') + (k.wonFw ? ' og ' + k.wonFw + ' vundet rammeaftale' : '') };
+    if (k.openProj || k.openFw) return { key: 'active_dialogue', why: 'Åben sag i kvalificering, PQ eller tilbud' };
+    if (k.acts > 0) return { key: 'known', why: k.acts + (k.acts === 1 ? ' aktivitet' : ' aktiviteter') + ', ingen åben sag' };
+    return { key: 'unknown', why: 'Ingen aktivitet endnu' };
+  }
+  function effStage(f) { return f.ovr && f.stage ? f.stage : suggestStage(f).key; }
+
+  var SENIOR = /direkt|chef|partner|ceo|cfo|cto|leder|formand|president|ejer/i;
+  // Relationsstyrke 0 til 100: nyhed 30, hyppighed 25, bredde 20, dybde 15, tendens 10
+  function firmStrength(f, k) {
+    k = k || firmFacts(f);
+    var gap = k.last ? diffDays(TODAY, k.last) : 9999;
+    var nyhed = k.last ? Math.round(30 * Math.max(0, Math.min(1, (365 - Math.max(gap, 14)) / 351))) : 0;
+    var hyp = Math.round(25 * Math.min(k.n12, 8) / 8);
+    var bredde = Math.round(20 * Math.min(k.contacts12.length, 4) / 4);
+    var top = 0;
+    k.contacts12.forEach(function (id) {
+      var p = byId(persons, id); if (!p) return;
+      if ((p.tags || []).indexOf('beslutningstager') >= 0) top = Math.max(top, 15);
+      else if (SENIOR.test(titelOf(p))) top = Math.max(top, 10);
+    });
+    var tend = k.n12 > k.nPrev ? 10 : (k.n12 === k.nPrev && k.n12 > 0 ? 5 : 0);
+    var parts = [
+      { n: 'Nyhed', pts: nyhed, max: 30, txt: k.last ? 'Sidst mødt ' + fmtDate(k.last) : 'Ingen aktivitet' },
+      { n: 'Hyppighed', pts: hyp, max: 25, txt: k.n12 + (k.n12 === 1 ? ' aktivitet' : ' aktiviteter') + ' seneste 12 måneder' },
+      { n: 'Bredde', pts: bredde, max: 20, txt: k.contacts12.length + (k.contacts12.length === 1 ? ' kontakt' : ' kontakter') + ' med aktivitet' },
+      { n: 'Dybde', pts: top, max: 15, txt: top === 15 ? 'Beslutningstager i dialog' : top === 10 ? 'Senior kontakt i dialog' : 'Ingen senior kontakt i dialog' },
+      { n: 'Tendens', pts: tend, max: 10, txt: k.n12 + ' mod ' + k.nPrev + ' forrige 12 måneder' }
+    ];
+    var score = parts.reduce(function (a, x) { return a + x.pts; }, 0);
+    return { score: score, label: score < 25 ? 'Kold' : score < 50 ? 'Lun' : score < 75 ? 'Varm' : 'Stærk', parts: parts };
+  }
+  function stageBadge(f) {
+    var k = effStage(f); return '<span class="badge' + (k === 'dormant' ? ' warn' : '') + '">' + esc(lkName('company_stage', k)) + '</span>';
+  }
+  function relationSection(f) {
+    var k = firmFacts(f), sg = suggestStage(f, k), st = firmStrength(f, k), eff = effStage(f);
+    var opts = [['', 'Automatisk (forslag: ' + lkName('company_stage', sg.key) + ')']].concat(lkNames('company_stage', true).map(function (x) { return [lkKey(x), x.name]; }));
+    return '<section><h3>Relation</h3><div class="kv">' +
+      '<span class="k">Modenhed</span><span class="v">' + stageBadge(f) + ' <span class="muted">' + (f.ovr ? 'Valgt manuelt. Forslag: ' + esc(lkName('company_stage', sg.key)) + ' (' + esc(sg.why) + ')' : esc(sg.why)) + '</span></span><span></span>' +
+      '<span class="k">Vælg</span><span class="v"><select data-fstage="' + f.id + '" aria-label="Modenhed">' + optList(opts, f.ovr ? f.stage : '') + '</select></span><span></span>' +
+      '<span class="k">Styrke</span><span class="v"><strong>' + st.label + '</strong> · ' + st.score + ' af 100<div style="height:8px;border-radius:4px;background:var(--band);overflow:hidden;margin:4px 0"><div style="height:100%;width:' + st.score + '%;background:var(--accent)"></div></div></span><span></span>' +
+      '</div><ul class="elist">' + st.parts.map(function (x) { return '<li><span><b>' + x.n + '</b> ' + x.pts + ' af ' + x.max + ' · ' + esc(x.txt) + '</span></li>'; }).join('') + '</ul></section>';
+  }
+
+  /* ---------- PDF-tekst ---------- */
+  var PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/';
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    return new Promise(function (res, rej) {
+      var s = document.createElement('script'); s.src = PDFJS + 'pdf.min.js';
+      s.onload = function () { if (!window.pdfjsLib) return rej(new Error('PDF-læseren kunne ikke startes')); window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; res(window.pdfjsLib); };
+      s.onerror = function () { rej(new Error('PDF-læseren kunne ikke hentes')); };
+      document.head.appendChild(s);
+    });
+  }
+  function extractPdfText(file) {
+    return file.arrayBuffer().then(function (buf) {
+      return loadPdfJs().then(function (lib) { return lib.getDocument({ data: new Uint8Array(buf) }).promise; });
+    }).then(function (pdf) {
+      var out = [], n = Math.min(pdf.numPages, 80), i = 1;
+      function next() {
+        if (i > n) return out.join('\n\n');
+        return pdf.getPage(i++).then(function (pg) { return pg.getTextContent(); }).then(function (tc) {
+          out.push(tc.items.map(function (x) { return x.str; }).join(' ').replace(/[ \t]+/g, ' ').trim()); return next();
+        });
+      }
+      return next();
+    }).then(function (t) { return t.replace(/\n{3,}/g, '\n\n').trim().slice(0, 300000); });
+  }
+
+  /* ---------- Intel ---------- */
+  var intelEd = null;
+  function intelOf(kind, id) { return intels.filter(function (x) { return kind === 'f' ? x.firm === id : x.person === id; }).sort(function (a, b) { return a.dato < b.dato ? 1 : a.dato > b.dato ? -1 : b.id - a.id; }); }
+  function intelForm(kind, id, x) {
+    return '<form class="fgrid" data-intelform onsubmit="return false" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px">' +
+      '<label>Dato<input type="date" id="in-dato" value="' + esc(x ? x.dato : TODAY) + '"></label>' +
+      '<label>Titel<input type="text" id="in-titel" value="' + esc(x ? x.titel : '') + '" placeholder="fx Ny direktør ansat"></label>' +
+      '<label>Kilde (link)<input type="text" id="in-url" value="' + esc(x ? x.url : '') + '" placeholder="https://"></label>' +
+      '<label>PDF (valgfri)<input type="file" id="in-file" accept="application/pdf,.pdf"></label>' +
+      '<label class="wide" style="grid-column:1/-1">Note<textarea id="in-note" rows="3">' + esc(x ? x.note : '') + '</textarea></label>' +
+      (x && x.file ? '<label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="in-rmfile"> Fjern ' + esc(x.file.navn) + '</label>' : '') +
+      '<div class="actions" style="grid-column:1/-1"><button type="button" class="btn small primary" data-isave="' + kind + ':' + id + ':' + (x ? x.id : 0) + '">Gem intel</button><button type="button" class="btn small" data-icancel>Annullér</button><span class="muted" id="in-st"></span></div></form>';
+  }
+  function intelSection(kind, o) {
+    var list = intelOf(kind, o.id), open_ = intelEd && intelEd.kind === kind && intelEd.id === o.id;
+    var h = '<section><h3>Intel</h3>' + (list.length ? '<ul class="alist">' + list.map(function (x) {
+      return '<li><div class="hd"><span class="dt">' + fmtDate(x.dato) + '</span><b>' + esc(x.titel) + '</b>' + (x.url ? ' <a href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">Kilde</a>' : '') + '</div>' +
+        (x.note ? '<span class="note">' + esc(x.note) + '</span>' : '') +
+        (x.file ? '<div><button type="button" class="link" data-iopen="' + x.id + '">' + esc(x.file.navn) + '</button> <span class="muted">' + fsize(x.file.str) + (x.tekst ? ' · tekst udtrukket (' + x.tekst.length.toLocaleString('da-DK') + ' tegn)' : ' · ingen tekst fundet') + '</span></div>' : '') +
+        '<div class="actions"><button type="button" class="btn small" data-iedit="' + kind + ':' + o.id + ':' + x.id + '">Rediger</button><button type="button" class="btn small" data-idel="' + x.id + '">Slet</button></div></li>';
+    }).join('') + '</ul>' : '<p class="muted">Ingen intel endnu. Gem nyheder, observationer og PDF-artikler om ' + esc(o.navn) + '.</p>');
+    if (open_) h += intelForm(kind, o.id, intelEd.intel ? byId(intels, intelEd.intel) : null);
+    else h += '<div class="actions"><button type="button" class="btn small" data-iadd="' + kind + ':' + o.id + '">Tilføj intel</button></div>';
+    return h + '</section>';
+  }
+  function intelStatus(t) { var e = $('#in-st'); if (e) e.textContent = t || ''; }
+  function saveIntel(kind, oid, iid) {
+    var titel = $('#in-titel').value.trim(), dato = $('#in-dato').value, url = $('#in-url').value.trim(), note = $('#in-note').value.trim(), fi = $('#in-file'), file = fi && fi.files && fi.files[0], rm = $('#in-rmfile') && $('#in-rmfile').checked;
+    if (!titel) { intelStatus('Skriv en titel.'); return; }
+    if (!dato) { intelStatus('Vælg en dato.'); return; }
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+    if (file && !/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') { intelStatus('Kun PDF-filer kan tilføjes her.'); return; }
+    if (file && file.size > MAXB) { intelStatus('Filen er over 25 MB.'); return; }
+    var x = iid ? byId(intels, iid) : null, isNew = !x, oldFile = x && x.file ? x.file : null;
+    if (isNew) { x = { id: nextId(intels), firm: kind === 'f' ? oid : 0, person: kind === 'p' ? oid : 0, file: null, tekst: '' }; }
+    function finish(newFile, tekst, warn) {
+      x.dato = dato; x.titel = titel; x.url = url; x.note = note;
+      if (newFile) { x.file = newFile; x.tekst = tekst; if (oldFile) SB.storage.from(BUCKET).remove([oldFile.sti]); }
+      else if (rm && oldFile) { SB.storage.from(BUCKET).remove([oldFile.sti]); x.file = null; x.tekst = ''; }
+      if (isNew) intels.push(x);
+      intelEd = null; renderAll(); toast('Intel er gemt' + (warn ? '. ' + warn : ''));
+    }
+    if (!file) { finish(null); return; }
+    intelStatus('Læser PDF…');
+    extractPdfText(file).catch(function () { return null; }).then(function (tekst) {
+      var warn = tekst === null ? 'Teksten kunne ikke læses ud af PDF\'en' : !tekst ? 'Ingen tekst fundet. Scannede PDF\'er kan ikke læses' : '';
+      intelStatus('Uploader…');
+      var fid = newUuid(), path = ME.id + '/intel/' + uidOf('i', x.id) + '/' + fid + '-' + safeName(file.name);
+      return SB.storage.from(BUCKET).upload(path, file, { contentType: 'application/pdf', upsert: false }).then(function (r) {
+        if (r.error) throw r.error;
+        finish({ sti: path, navn: file.name, str: file.size, mime: 'application/pdf' }, tekst || '', warn);
+      });
+    }).catch(function (e) { intelStatus('Kunne ikke gemme: ' + ((e && e.message) || e)); });
+  }
+  function openIntelFile(id) {
+    var x = byId(intels, id); if (!x || !x.file) return;
+    var w = window.open('', '_blank');
+    SB.storage.from(BUCKET).createSignedUrl(x.file.sti, 120).then(function (r) {
+      if (r.error || !r.data) { if (w) w.close(); toast('Kunne ikke åbne filen: ' + (r.error && r.error.message)); return; }
+      if (w) w.location = r.data.signedUrl; else location.href = r.data.signedUrl;
+    });
+  }
+  function delIntel(id) {
+    var x = byId(intels, id); if (!x) return;
+    if (!confirm('Slet intel "' + x.titel + '"? Det kan ikke fortrydes.')) return;
+    if (x.file) SB.storage.from(BUCKET).remove([x.file.sti]);
+    intels.splice(intels.indexOf(x), 1); renderAll(); toast('Intel er slettet');
+  }
+  function purgeIntel(kind, id) {
+    for (var i = intels.length - 1; i >= 0; i--) {
+      var x = intels[i]; if (kind === 'f' ? x.firm === id : x.person === id) { if (x.file) SB.storage.from(BUCKET).remove([x.file.sti]); intels.splice(i, 1); }
+    }
+  }
+  document.addEventListener('click', function (e) {
+    var t = e.target; if (!t || !t.closest) return;
+    var b = t.closest('[data-iadd]'); if (b) { var p = b.getAttribute('data-iadd').split(':'); intelEd = { kind: p[0], id: +p[1], intel: 0 }; renderAll(); return; }
+    b = t.closest('[data-iedit]'); if (b) { var q = b.getAttribute('data-iedit').split(':'); intelEd = { kind: q[0], id: +q[1], intel: +q[2] }; renderAll(); return; }
+    if (t.closest('[data-icancel]')) { intelEd = null; renderAll(); return; }
+    b = t.closest('[data-isave]'); if (b) { var r = b.getAttribute('data-isave').split(':'); saveIntel(r[0], +r[1], +r[2]); return; }
+    b = t.closest('[data-iopen]'); if (b) { openIntelFile(+b.getAttribute('data-iopen')); return; }
+    b = t.closest('[data-idel]'); if (b) { delIntel(+b.getAttribute('data-idel')); return; }
+  });
+  document.addEventListener('change', function (e) {
+    var t = e.target; if (!t || !t.matches || !t.matches('[data-fstage]')) return;
+    var f = byId(firms, +t.getAttribute('data-fstage')); if (!f) return;
+    f.ovr = t.value !== ''; if (f.ovr) f.stage = t.value; renderAll();
+  });
+
   if (window.__KR_NOBOOT !== true) boot();
-  window.__KR = { fwRestHon: fwRestHon, dateAlarms: dateAlarms, fwWarnings: fwWarnings, LK: LK, lkKey: lkKey, lkId: lkId, toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, fws: fws, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
+  window.__KR = { intels: intels, effStage: effStage, suggestStage: suggestStage, firmStrength: firmStrength, firmFacts: firmFacts, fwRestHon: fwRestHon, dateAlarms: dateAlarms, fwWarnings: fwWarnings, LK: LK, lkKey: lkKey, lkId: lkId, toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, fws: fws, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
 })();
