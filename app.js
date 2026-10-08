@@ -737,7 +737,7 @@
     h += '<section><h3>Karriere</h3>' + empList(p) + jobForm(p) + '</section>';
     h += listChips(p);
     h += fuSection('p', p.id);
-    if (!isColleague(p)) h += intelSection('p', p);
+    if (!isColleague(p)) h += intelSection('p', p) + promptBtn('p', p);
     h += '<section><h3>Nævnte projekter</h3>' + (projIds.length ? '<ul class="plist">' + projIds.map(function (id) { return projRow(byId(projects, id), ''); }).join('') + '</ul>' : '<p class="muted">Ingen projekter knyttet endnu.</p>') + '</section>';
     if (!isColleague(p)) {
       h += '<section><h3>Kendes af kolleger</h3>' + (cols.length ? '<div class="chips">' + cols.map(function (c) { var q = byId(persons, c); return '<span class="chip">' + go('p', q.id) + esc(q.navn) + '</button></span>'; }).join('') + '</div>' : '<p class="muted">Ingen kolleger har været med på en aktivitet.</p>') + '</section>';
@@ -828,7 +828,7 @@
     var other = mentioned.filter(function (id) { return !own.some(function (p) { return p.id === id; }); });
     var h = '<button type="button" class="btn back" data-back="f">‹ Tilbage til listen</button>';
     h += '<div><h2>' + esc(f.navn) + (f.kat === 'egen' ? '' : stageBadge(f)) + '</h2><p class="muted">' + esc(f.sub) + '</p></div>';
-    if (f.kat !== 'egen') h += relationSection(f);
+    if (f.kat !== 'egen') h += relationSection(f) + promptBtn('f', f);
     h += '<section><h3>Stamdata</h3><div class="grid3">' +
       '<span><span class="k">Type</span>' + esc(KAT[f.kat]) + '</span><span><span class="k">By</span>' + (f.by ? esc(f.by) : 'Ikke angivet') + '</span><span><span class="k">CVR</span>' + (f.cvr ? esc(f.cvr) : 'Ikke angivet') + '</span>' +
       '<span><span class="k">Adresse</span>' + (f.adr ? esc(f.adr.vej) + ', ' + esc(f.adr.post) + ' ' + esc(f.adr.by) + ' <button type="button" class="link" data-map="' + f.id + '">Vis på kort</button>' : 'Ikke angivet') + '</span>' +
@@ -2833,6 +2833,20 @@
     var f = byId(firms, +t.getAttribute('data-fstage')); if (!f) return;
     f.ovr = t.value !== ''; if (f.ovr) f.stage = t.value; renderAll();
   });
+
+  /* ---------- Prompts til Claude-skills ---------- */
+  var SBPROJ = 'ypblbrzqvxvxocrrxvnv';
+  function promptFirm(f) {
+    return 'Lav et kunderesumé med skillen kunderesume for virksomheden ' + f.navn + ' (id ' + uidOf('f', f.id) + ') i PONTIFEX. Læs data fra Supabase-projektet ' + SBPROJ + ' (kun læsning), søg nyt på nettet om virksomheden, og lever resuméet som PDF.';
+  }
+  function promptPerson(p) {
+    var c = cur(p), fo = c ? byId(firms, c.firm) : null;
+    return 'Lav et mødeoplæg med skillen moedeoplaeg til ' + p.navn + (fo ? ' hos ' + fo.navn : '') + ' (kontakt-id ' + uidOf('p', p.id) + ') i PONTIFEX. Læs data fra Supabase-projektet ' + SBPROJ + ' (kun læsning), søg nyt på nettet om personen og virksomheden, og lever oplægget som PDF. Mødet handler om: ';
+  }
+  function promptBtn(kind, o) {
+    var txt = kind === 'f' ? promptFirm(o) : promptPerson(o);
+    return '<div class="actions"><button type="button" class="btn small" data-copy="' + esc(txt) + '">' + (kind === 'f' ? 'Kopiér prompt: kunderesumé' : 'Kopiér prompt: mødeoplæg') + '</button></div>';
+  }
 
   if (window.__KR_NOBOOT !== true) boot();
   window.__KR = { intels: intels, effStage: effStage, suggestStage: suggestStage, firmStrength: firmStrength, firmFacts: firmFacts, fwRestHon: fwRestHon, dateAlarms: dateAlarms, fwWarnings: fwWarnings, LK: LK, lkKey: lkKey, lkId: lkId, toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, fws: fws, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
