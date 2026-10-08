@@ -1,6 +1,6 @@
-# Kontaktregister
+# PONTIFEX
 
-Personlig kontaktbase og projektpipeline. Ren HTML og JavaScript uden byggetrin. Data ligger i Supabase (projektet "Kontaktregister", Stockholm), og siden kan hostes gratis på GitHub Pages.
+Personlig kontaktbase og projektpipeline. Ren HTML og JavaScript uden byggetrin. Data ligger i Supabase (Supabase-projektet, Stockholm), og siden kan hostes gratis på GitHub Pages.
 
 ## Filer
 
