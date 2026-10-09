@@ -76,13 +76,14 @@ Kolleger (tabellen `employee`) ligger tilbage. Ret eller slet dem i appen, eller
 - **Rammeaftaler** har egen fane: bygherre, fase, anlægssum, honorar, vores andel, start, slut og forlængelse. Restværdien regnes lineært over tiden. Projekter kan kobles til en rammeaftale med tildelingsform, og detaljen viser hitrate pr. tildelingsform. I tragten kan rammeaftaler vises med restværdi eller skjules.
 - **Alarmer** vises 5 dage før en PQ-frist eller tilbudsfrist og 6 måneder før en vundet rammeaftale udløber.
 - **Modenhed** foreslås automatisk for hver virksomhed (Ukendt, Kendt, Aktiv dialog, Kunde, Strategisk partner, Sovende) og kan overstyres manuelt. **Relationsstyrke** (0 til 100, Kold til Stærk) regnes ud fra nyhed, hyppighed, bredde, dybde og tendens.
+- **Associerede virksomheder** (grupper): forbind virksomheder, der hænger sammen commercielt, også når du ikke kender koncernen. Gruppens navn er valgfrit og vises ellers som "Ikke navngivet: A + B". Hvert medlem kan have en rolle (Medlem, Moderselskab, Datterselskab, Søsterselskab, Joint venture, Ukendt). En virksomhed kan være i flere grupper, og listen kan filtreres på gruppemedlemskab.
 - **Intel** på virksomheder og kontakter: dato, titel, link, note og valgfri PDF. Teksten i PDF'en læses ved upload, så den kan bruges i resuméer. Scannede PDF'er har ingen tekst. Læsningen bruger biblioteket pdf.js fra jsDelivr.
 - **Opslagslister** (knappen øverst) redigerer aktivitetstyper, titler, funktioner, tilknytningstyper, rollertyper og bygherretyper.
 - **Claude-skills**: `kunderesume` og `moedeoplaeg` læser kun fra databasen og laver en PDF. Knapperne "Kopiér prompt" på virksomhed og kontakt giver den færdige prompt.
 
 ## Databasen
 
-Tabeller: `company`, `contact`, `contact_company` (tilknytninger), `employee` (kolleger), `activity` med `activity_contact`, `activity_employee` og `activity_project`, `project` med `project_log`, `framework`, `roles` (roller på projekter og rammeaftaler), `followup`, `intel`, `attachment`, `label` og `label_link`, `typology` og `company_typology`, samt opslagstabeller til typer og faser. SQL-scripts til hvert trin ligger i repository (`08` til `12`).
+Tabeller: `company`, `contact`, `contact_company` (tilknytninger), `employee` (kolleger), `activity` med `activity_contact`, `activity_employee` og `activity_project`, `project` med `project_log`, `framework`, `roles` (roller på projekter og rammeaftaler), `followup`, `intel`, `company_group` og `company_group_member`, `attachment`, `label` og `label_link`, `typology` og `company_typology`, samt opslagstabeller til typer og faser. SQL-scripts til hvert trin ligger i repository (`08` til `13`).
 
 ## Kendte begrænsninger
 

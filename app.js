@@ -20,7 +20,7 @@
 
   var TYPO = ['Renovering', 'Skoler og uddannelse', 'Idræt', 'Kultur', 'Boliger (private)', 'Boliger (almene)', 'Kontor', 'Laboratorier', 'Fredede bygninger', 'Hospitaler og sundhed', 'Industri og farma', 'Butikker', 'Hoteller'];
   var TYPO_KAT = ['arkitekt', 'entreprenoer'];
-  var firms = [], persons = [], projects = [], acts = [], followups = [], fws = [], intels = [];
+  var firms = [], persons = [], projects = [], acts = [], followups = [], fws = [], intels = [], groups = [];
 
   // Datohjælp
   function fmtDate(iso) { return new Date(iso + 'T12:00:00').toLocaleDateString('da-DK', { day: 'numeric', month: 'short', year: 'numeric' }); }
@@ -806,15 +806,18 @@
   function renderFirms() {
     var q = $('#q-f').value.trim().toLowerCase(), kat = $('#k-f').value, ty = $('#y-f').value;
     var mf = $('#m-f'), mv = mf.value; mf.innerHTML = '<option value="">Alle modenheder</option>' + lkNames('company_stage', true).map(function (x) { return '<option value="' + esc(lkKey(x)) + '">' + esc(x.name) + '</option>'; }).join(''); mf.value = mv; mv = mf.value;
+    var gfv = $('#g-f').value;
     var list = firms.filter(function (f) {
       if (kat && f.kat !== kat) return false;
+      if (gfv === 'in' && !groupsOf(f.id).length) return false;
+      if (gfv === 'out' && groupsOf(f.id).length) return false;
       if (mv && (f.kat === 'egen' || effStage(f) !== mv)) return false;
       if (ty !== '' && lvl(f, +ty) < 4) return false;
-      return !q || (f.navn + ' ' + f.by + ' ' + f.sub + ' ' + f.note).toLowerCase().indexOf(q) >= 0;
+      return !q || (f.navn + ' ' + f.by + ' ' + f.sub + ' ' + f.note + ' ' + groupsOf(f.id).map(grLabel).join(' ')).toLowerCase().indexOf(q) >= 0;
     }).sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); });
     $('#c-f').textContent = list.length + ' af ' + firms.length;
     $('#list-f').innerHTML = list.length ? list.map(function (f) {
-      return '<li><button type="button" class="item" data-go="f:' + f.id + '" aria-current="' + (sel.f === f.id) + '"><span class="t">' + esc(f.navn) + '</span><span class="d">' + firmPeople(f.id).length + ' personer</span><span class="s">' + esc(f.sub) + (f.by ? ' · ' + esc(f.by) : '') + (f.kat !== 'egen' ? ' · ' + esc(lkName('company_stage', effStage(f))) + ' · ' + firmStrength(f).label : '') + '</span>' + (hasTypo(f) && strongText(f).length ? '<span class="s">Stærk: ' + esc(strongText(f).join(', ')) + '</span>' : '') + '</button></li>';
+      return '<li><button type="button" class="item" data-go="f:' + f.id + '" aria-current="' + (sel.f === f.id) + '"><span class="t">' + esc(f.navn) + '</span><span class="d">' + firmPeople(f.id).length + ' personer</span><span class="s">' + esc(f.sub) + (f.by ? ' · ' + esc(f.by) : '') + (f.kat !== 'egen' ? ' · ' + esc(lkName('company_stage', effStage(f))) + ' · ' + firmStrength(f).label : '') + (assocOf(f.id).length ? ' · Associeret med ' + assocOf(f.id).length : '') + '</span>' + (hasTypo(f) && strongText(f).length ? '<span class="s">Stærk: ' + esc(strongText(f).join(', ')) + '</span>' : '') + '</button></li>';
     }).join('') : '<li class="empty">Ingen virksomheder matcher.</li>';
     $('#detail-f').innerHTML = firmDetail(byId(firms, sel.f));
     $('#split-f').classList.toggle('open', open.f);
@@ -829,6 +832,7 @@
     var h = '<button type="button" class="btn back" data-back="f">‹ Tilbage til listen</button>';
     h += '<div><h2>' + esc(f.navn) + (f.kat === 'egen' ? '' : stageBadge(f)) + '</h2><p class="muted">' + esc(f.sub) + '</p></div>';
     if (f.kat !== 'egen') h += relationSection(f) + promptBtn('f', f);
+    h += grSection(f);
     h += '<section><h3>Stamdata</h3><div class="grid3">' +
       '<span><span class="k">Type</span>' + esc(KAT[f.kat]) + '</span><span><span class="k">By</span>' + (f.by ? esc(f.by) : 'Ikke angivet') + '</span><span><span class="k">CVR</span>' + (f.cvr ? esc(f.cvr) : 'Ikke angivet') + '</span>' +
       '<span><span class="k">Adresse</span>' + (f.adr ? esc(f.adr.vej) + ', ' + esc(f.adr.post) + ' ' + esc(f.adr.by) + ' <button type="button" class="link" data-map="' + f.id + '">Vis på kort</button>' : 'Ikke angivet') + '</span>' +
@@ -1249,7 +1253,7 @@
 
   ['v-k', 'q-k', 'k-k', 'l-k', 'r-k', 'mt-k', 'ms-k'].forEach(function (id) { $('#' + id).addEventListener('input', function () { renderMap(id !== 'r-k'); }); });
   ['q-p', 'k-p', 't-p', 'l-p', 's-p'].forEach(function (id) { $('#' + id).addEventListener('input', renderPersons); });
-  ['q-f', 'k-f', 'y-f', 'm-f'].forEach(function (id) { $('#' + id).addEventListener('input', renderFirms); });
+  ['q-f', 'k-f', 'y-f', 'm-f', 'g-f'].forEach(function (id) { $('#' + id).addEventListener('input', renderFirms); });
   ['q-a', 'k-a', 'p-a', 'g-a'].forEach(function (id) { $('#' + id).addEventListener('input', renderActs); });
   $('#v-o').addEventListener('input', renderFu);
   $('#new-a').addEventListener('click', function () { var f = $('#form-a'); f.hidden = !f.hidden; if (!f.hidden) $('#f-title').focus(); });
@@ -1299,11 +1303,11 @@
   /* ===================== Datalag: Supabase ===================== */
   var CFG = window.KR_CONFIG || {};
   var SB = null, ME = null, lastRows = null, loadedAt = 0, syncBusy = false, syncTimer = null, syncFail = 0, pending = false, booted = false;
-  var UU = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {}, w: {}, i: {} }, NN = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {}, w: {}, i: {} }, CNT = { f: 0, p: 0, j: 0, a: 0, o: 0, l: 0, w: 0, i: 0 };
+  var UU = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {}, w: {}, i: {}, g: {} }, NN = { f: {}, p: {}, j: {}, a: {}, o: {}, l: {}, w: {}, i: {}, g: {} }, CNT = { f: 0, p: 0, j: 0, a: 0, o: 0, l: 0, w: 0, i: 0, g: 0 };
   var TAGU = {};
 
   /* ---------- Opslagstabeller ---------- */
-  var LKT = ['company_category', 'developer_type', 'company_stage', 'project_stage', 'project_source', 'activity_type', 'activity_status', 'employee_title', 'contact_function', 'affiliation_type', 'participant_role', 'project_type', 'construction_type', 'award_type', 'our_role'];
+  var LKT = ['company_category', 'developer_type', 'company_stage', 'project_stage', 'project_source', 'activity_type', 'activity_status', 'employee_title', 'contact_function', 'affiliation_type', 'participant_role', 'project_type', 'construction_type', 'award_type', 'our_role', 'group_role'];
   var LKX = { developer_type: { group_name: null, sector: null }, project_stage: { default_probability: 0, is_open: false }, participant_role: { kind: 'company' } };
   var LK = {};
   LKT.forEach(function (t) { LK[t] = []; });
@@ -1389,7 +1393,7 @@
     setStatus('busy', 'Henter data…');
     var T = [['company', ['created_at', 'id']], ['employee', ['created_at', 'id']], ['contact', ['created_at', 'id']], ['contact_company', ['id']], ['framework', ['created_at', 'id']], ['project', ['created_at', 'id']], ['project_log', ['changed_at', 'id']],
       ['roles', ['created_at', 'id']], ['activity', ['created_at', 'id']], ['activity_contact', ['activity_id', 'contact_id']], ['activity_employee', ['activity_id', 'employee_id']], ['activity_project', ['activity_id', 'project_id']],
-      ['followup', ['due_date', 'id']], ['company_typology', ['company_id', 'typology_id']], ['label', ['name', 'id']], ['label_link', ['id']], ['attachment', ['created_at', 'id']], ['intel', ['intel_date', 'created_at']]];
+      ['followup', ['due_date', 'id']], ['company_typology', ['company_id', 'typology_id']], ['label', ['name', 'id']], ['label_link', ['id']], ['attachment', ['created_at', 'id']], ['intel', ['intel_date', 'created_at']], ['company_group', ['created_at', 'id']], ['company_group_member', ['group_id', 'company_id']]];
     LKT.forEach(function (t) { T.push([t, ['sort_order', 'id']]); });
     return Promise.all(T.map(function (t) { return fetchAll(t[0], t[1]); })).then(function (r) {
       var D = {}; T.forEach(function (t, i) { D[t[0]] = r[i]; });
@@ -1399,8 +1403,8 @@
   }
 
   function applyData(D) {
-    [firms, persons, projects, acts, followups, lists, fws, intels].forEach(function (a) { a.length = 0; });
-    ['f', 'p', 'j', 'a', 'o', 'l', 'w', 'i'].forEach(function (k) { UU[k] = {}; NN[k] = {}; CNT[k] = 0; });
+    [firms, persons, projects, acts, followups, lists, fws, intels, groups].forEach(function (a) { a.length = 0; });
+    ['f', 'p', 'j', 'a', 'o', 'l', 'w', 'i', 'g'].forEach(function (k) { UU[k] = {}; NN[k] = {}; CNT[k] = 0; });
     TAGU = {};
     LKT.forEach(function (t) {
       LK[t] = (D[t] || []).map(function (r) {
@@ -1508,6 +1512,11 @@
       intels.push({ id: numOf('i', v.id), firm: v.company_id ? numOf('f', v.company_id) : 0, person: v.contact_id ? numOf('p', v.contact_id) : 0, dato: v.intel_date, titel: v.title, url: v.source_url || '', note: v.note || '', tekst: v.intel_text || '',
         file: v.file_path ? { sti: v.file_path, navn: v.file_name || 'fil', str: v.file_size, mime: v.file_mime || '' } : null });
     });
+    (D.company_group || []).forEach(function (v) { groups.push({ id: numOf('g', v.id), navn: v.name || '', note: v.note || '', mem: [] }); });
+    (D.company_group_member || []).forEach(function (v) {
+      var g = byId(groups, numOf('g', v.group_id)), fid = numOf('f', v.company_id); if (!g || !fid) return;
+      g.mem.push({ firm: fid, rolle: lkK('group_role', v.role_id), note: v.note || '' });
+    });
     D.followup.forEach(function (v) {
       followups.push({ id: numOf('o', v.id), tekst: v.task, forfald: v.due_date, person: v.contact_id ? numOf('p', v.contact_id) : 0, resp: v.employee_id ? numOf('p', v.employee_id) : 0, act: numOf('a', v.activity_id), proj: numOf('j', v.project_id), done: !!v.done_at, doneAt: v.done_at || null, varsel: v.warning_days || 0 });
     });
@@ -1521,7 +1530,7 @@
 
   /* ---------- Model til rækker ---------- */
   function toRows() {
-    var R = { employee: {}, company: {}, contact: {}, contact_company: {}, framework: {}, project: {}, roles: {}, activity: {}, activity_contact: {}, activity_employee: {}, activity_project: {}, followup: {}, company_typology: {}, label: {}, label_link: {}, intel: {} };
+    var R = { employee: {}, company: {}, contact: {}, contact_company: {}, framework: {}, project: {}, roles: {}, activity: {}, activity_contact: {}, activity_employee: {}, activity_project: {}, followup: {}, company_typology: {}, label: {}, label_link: {}, intel: {}, company_group: {}, company_group_member: {} };
     LKT.forEach(function (t) { R[t] = {}; });
     firms.forEach(function (f) {
       var a = f.adr || f.adrx || null, id = uidOf('f', f.id);
@@ -1604,6 +1613,14 @@
       if (!cu && !ku) return;
       R.intel[id] = { id: id, company_id: cu, contact_id: cu ? null : ku, intel_date: x.dato, title: x.titel, source_url: qd(x.url), note: qd(x.note), file_name: x.file ? x.file.navn : null, file_path: x.file ? x.file.sti : null, file_size: x.file ? nn(x.file.str) : null, file_mime: x.file ? qd(x.file.mime) : null, intel_text: qd(x.tekst) };
     });
+    groups.forEach(function (g) {
+      var id = uidOf('g', g.id), seen = {};
+      R.company_group[id] = { id: id, name: qd((g.navn || '').trim()), note: qd(g.note) };
+      g.mem.forEach(function (m) {
+        var cu = m.firm ? uidOf('f', m.firm) : null; if (!cu || !R.company[cu] || seen[cu]) return; seen[cu] = 1;
+        R.company_group_member[id + '|' + cu] = { group_id: id, company_id: cu, role_id: m.rolle ? lkId('group_role', m.rolle) : null, note: qd(m.note) };
+      });
+    });
     acts.forEach(function (a) {
       var id = uidOf('a', a.id), via = a.via && a.via.length ? uidOf('p', a.via[0]) : null;
       R.activity[id] = { id: id, date: a.dato, title: a.titel, notes: qd(a.note), place: qd(a.sted), attended: !!a.me, type_id: lkId('activity_type', a.type, true) || lkId('activity_type', 'andet'),
@@ -1636,8 +1653,8 @@
   }
 
   /* ---------- Diff og skrivning ---------- */
-  var ORDER = LKT.concat(['employee', 'company', 'contact', 'contact_company', 'intel', 'framework', 'project', 'roles', 'activity', 'activity_contact', 'activity_employee', 'activity_project', 'followup', 'company_typology', 'label', 'label_link']);
-  var PKS = { activity_contact: ['activity_id', 'contact_id'], activity_employee: ['activity_id', 'employee_id'], activity_project: ['activity_id', 'project_id'], company_typology: ['company_id', 'typology_id'], label_link: ['label_id', 'contact_id'] };
+  var ORDER = LKT.concat(['employee', 'company', 'contact', 'contact_company', 'intel', 'company_group', 'company_group_member', 'framework', 'project', 'roles', 'activity', 'activity_contact', 'activity_employee', 'activity_project', 'followup', 'company_typology', 'label', 'label_link']);
+  var PKS = { activity_contact: ['activity_id', 'contact_id'], activity_employee: ['activity_id', 'employee_id'], activity_project: ['activity_id', 'project_id'], company_typology: ['company_id', 'typology_id'], company_group_member: ['group_id', 'company_id'], label_link: ['label_id', 'contact_id'] };
 
   function diff(oldR, newR) {
     var ins = [], upd = [], del = [];
@@ -2300,6 +2317,7 @@
     if (!confirm('Slet "' + name + '"? Det kan ikke fortrydes.')) return;
     if (kind === 'a') purgeFiles(byId(acts, id)); if (kind === 'j') purgeFiles(byId(projects, id));
     if (kind === 'p' || kind === 'f') purgeIntel(kind, id);
+    if (kind === 'f') purgeGroups(id);
     function without(arr, fn) { for (var i = arr.length - 1; i >= 0; i--) if (fn(arr[i])) arr.splice(i, 1); }
     if (kind === 'p') {
       without(persons, function (x) { return x.id === id; }); without(followups, function (x) { return x.person === id; }); followups.forEach(function (x) { if (x.resp === id) x.resp = 0; });
@@ -2412,7 +2430,7 @@
 
 
   /* ===================== Opslagslister ===================== */
-  var LKE = [['activity_type', 'Aktivitetstyper'], ['employee_title', 'Medarbejdertitler'], ['contact_function', 'Kontaktfunktioner'], ['affiliation_type', 'Tilknytningstyper'], ['participant_role', 'Roller på projekter'], ['developer_type', 'Bygherretyper']];
+  var LKE = [['activity_type', 'Aktivitetstyper'], ['employee_title', 'Medarbejdertitler'], ['contact_function', 'Kontaktfunktioner'], ['affiliation_type', 'Tilknytningstyper'], ['participant_role', 'Roller på projekter'], ['developer_type', 'Bygherretyper'], ['group_role', 'Roller i grupper']];
   var lkCur = 'activity_type';
   function lkUsage(t, row) {
     var key = lkKey(row), n = 0;
@@ -2422,6 +2440,7 @@
     else if (t === 'affiliation_type') persons.forEach(function (p) { p.emp.forEach(function (e) { if ((e.typ || 'employee') === key) n++; }); });
     else if (t === 'participant_role') projects.forEach(function (pr) { (pr.roles || []).forEach(function (x) { if (x.role === key) n++; }); });
     else if (t === 'developer_type') firms.forEach(function (f) { if (f.dev === key) n++; });
+    else if (t === 'group_role') groups.forEach(function (g) { g.mem.forEach(function (m) { if (m.rolle === key) n++; }); });
     return n;
   }
   function lkRename(t, row, nn) {
@@ -2434,6 +2453,7 @@
       else if (t === 'affiliation_type') persons.forEach(function (p) { p.emp.forEach(function (e) { if (e.typ === oldKey) e.typ = newKey; }); });
       else if (t === 'participant_role') projects.forEach(function (pr) { (pr.roles || []).forEach(function (x) { if (x.role === oldKey) x.role = newKey; }); });
       else if (t === 'developer_type') firms.forEach(function (f) { if (f.dev === oldKey) f.dev = newKey; });
+      else if (t === 'group_role') groups.forEach(function (g) { g.mem.forEach(function (m) { if (m.rolle === oldKey) m.rolle = newKey; }); });
     }
   }
   function lkRender() {
@@ -2856,6 +2876,91 @@
     return '<div class="actions"><button type="button" class="btn small" data-copy="' + esc(txt) + '">' + (kind === 'f' ? 'Kopiér prompt: kunderesumé' : 'Kopiér prompt: mødeoplæg') + '</button></div>';
   }
 
+  /* ===================== Grupper af associerede virksomheder ===================== */
+  var grForm = null;
+  function grLabel(g) {
+    var n = (g.navn || '').trim(); if (n) return n;
+    var names = g.mem.map(function (m) { var f = byId(firms, m.firm); return f ? f.navn : ''; }).filter(Boolean);
+    return 'Ikke navngivet: ' + (names.join(' + ') || 'ingen virksomheder endnu');
+  }
+  function groupsOf(fid) { return groups.filter(function (g) { return g.mem.some(function (m) { return m.firm === fid; }); }); }
+  function assocOf(fid) {
+    var seen = {}, out = [];
+    groupsOf(fid).forEach(function (g) { g.mem.forEach(function (m) { if (m.firm !== fid && !seen[m.firm] && byId(firms, m.firm)) { seen[m.firm] = 1; out.push(m.firm); } }); });
+    return out;
+  }
+  function grMem(g, fid) { for (var i = 0; i < g.mem.length; i++) if (g.mem[i].firm === fid) return g.mem[i]; return null; }
+  function grRoleSel(attr, val) {
+    return '<select ' + attr + ' aria-label="Rolle"><option value="">Ingen rolle</option>' + lkNames('group_role', false).filter(function (r) { return r.active || lkKey(r) === val; }).map(function (r) {
+      return '<option value="' + esc(lkKey(r)) + '"' + (lkKey(r) === val ? ' selected' : '') + '>' + esc(r.name) + '</option>';
+    }).join('') + '</select>';
+  }
+  function grForm_(f) {
+    var others = firms.filter(function (x) { return x.id !== f.id; }).sort(function (a, b) { return a.navn.localeCompare(b.navn, 'da'); });
+    return '<form class="fgrid" data-grform onsubmit="return false" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px">' +
+      '<label>Gruppe<select id="gr-t"><option value="0">Ny gruppe</option>' + groups.slice().sort(function (a, b) { return grLabel(a).localeCompare(grLabel(b), 'da'); }).map(function (g) { return '<option value="' + g.id + '">' + esc(grLabel(g)) + '</option>'; }).join('') + '</select></label>' +
+      '<label>Gruppenavn, valgfrit<input type="text" id="gr-navn" placeholder="Kan udfyldes senere"></label>' +
+      '<label>Forbind med virksomhed<select id="gr-f"><option value="0">Ingen endnu (åben gruppe)</option>' + others.map(function (x) { return '<option value="' + x.id + '">' + esc(x.navn) + '</option>'; }).join('') + '</select></label>' +
+      '<label>Dens rolle' + grRoleSel('id="gr-r2"', '') + '</label>' +
+      '<label>Rolle for ' + esc(f.navn) + grRoleSel('id="gr-r1"', '') + '</label>' +
+      '<div class="actions" style="grid-column:1/-1"><button type="button" class="btn small primary" data-gsave="' + f.id + '">Gem</button><button type="button" class="btn small" data-gcancel>Annullér</button></div></form>';
+  }
+  function grSection(f) {
+    var gs = groupsOf(f.id), h = '<section><h3>Associerede virksomheder</h3>';
+    if (!gs.length) h += '<p class="muted">Ikke forbundet med andre virksomheder endnu.</p>';
+    gs.forEach(function (g) {
+      h += '<div style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:8px">' +
+        '<label class="muted" style="display:flex;flex-direction:column;gap:4px">Gruppe<input type="text" data-gname="' + g.id + '" value="' + esc(g.navn) + '" placeholder="Ikke navngivet (navn er valgfrit)"></label>' +
+        '<ul class="blist">' + g.mem.map(function (m) {
+          var x = byId(firms, m.firm); if (!x) return '';
+          return '<li>' + (x.id === f.id ? '<b>' + esc(x.navn) + '</b> <span class="muted">(denne virksomhed)</span>' : go('f', x.id) + esc(x.navn) + '</button>') + ' ' + grRoleSel('data-grole="' + g.id + ':' + x.id + '"', m.rolle) +
+            ' <button type="button" class="btn small" data-grm="' + g.id + ':' + x.id + '" aria-label="Fjern ' + esc(x.navn) + ' fra gruppen">Fjern</button></li>';
+        }).join('') + '</ul>' +
+        '<label class="muted" style="display:flex;flex-direction:column;gap:4px">Note<input type="text" data-gnote="' + g.id + '" value="' + esc(g.note) + '" placeholder="fx hvordan de hænger sammen"></label>' +
+        '<div class="actions"><button type="button" class="btn small" data-gdel="' + g.id + '">Slet gruppen</button></div></div>';
+    });
+    if (grForm && grForm.fid === f.id) h += grForm_(f);
+    else h += '<div class="actions"><button type="button" class="btn small" data-gadd="' + f.id + '">Forbind med…</button></div>';
+    return h + '</section>';
+  }
+  function grSave(fid) {
+    var t = +$('#gr-t').value, other = +$('#gr-f').value, navn = $('#gr-navn').value.trim(), r1 = $('#gr-r1').value, r2 = $('#gr-r2').value, g, m;
+    if (t) { g = byId(groups, t); if (!g) return; } else { g = { id: nextId(groups), navn: navn, note: '', mem: [] }; groups.push(g); }
+    if (t && navn && !g.navn) g.navn = navn;
+    m = grMem(g, fid); if (!m) g.mem.push({ firm: fid, rolle: r1, note: '' }); else if (r1) m.rolle = r1;
+    if (other) { m = grMem(g, other); if (!m) g.mem.push({ firm: other, rolle: r2, note: '' }); else if (r2) m.rolle = r2; }
+    grForm = null; renderAll(); toast(other ? 'Virksomhederne er forbundet' : 'Gruppen er oprettet');
+  }
+  function purgeGroups(fid) {
+    for (var i = groups.length - 1; i >= 0; i--) {
+      groups[i].mem = groups[i].mem.filter(function (m) { return m.firm !== fid; });
+      if (!groups[i].mem.length) groups.splice(i, 1);
+    }
+  }
+  document.addEventListener('click', function (e) {
+    var t = e.target; if (!t || !t.closest) return;
+    var b = t.closest('[data-gadd]'); if (b) { grForm = { fid: +b.getAttribute('data-gadd') }; renderAll(); return; }
+    if (t.closest('[data-gcancel]')) { grForm = null; renderAll(); return; }
+    b = t.closest('[data-gsave]'); if (b) { grSave(+b.getAttribute('data-gsave')); return; }
+    b = t.closest('[data-grm]'); if (b) {
+      var p = b.getAttribute('data-grm').split(':'), g = byId(groups, +p[0]); if (!g) return;
+      g.mem = g.mem.filter(function (m) { return m.firm !== +p[1]; });
+      if (!g.mem.length) groups.splice(groups.indexOf(g), 1);
+      renderAll(); toast('Virksomheden er fjernet fra gruppen'); return;
+    }
+    b = t.closest('[data-gdel]'); if (b) {
+      var g2 = byId(groups, +b.getAttribute('data-gdel')); if (!g2) return;
+      if (!confirm('Slet gruppen "' + grLabel(g2) + '"? Virksomhederne beholdes.')) return;
+      groups.splice(groups.indexOf(g2), 1); renderAll(); toast('Gruppen er slettet');
+    }
+  });
+  document.addEventListener('change', function (e) {
+    var t = e.target; if (!t || !t.getAttribute) return;
+    var a = t.getAttribute('data-gname'); if (a != null) { var g = byId(groups, +a); if (g) { g.navn = t.value.trim(); renderAll(); } return; }
+    a = t.getAttribute('data-gnote'); if (a != null) { var g1 = byId(groups, +a); if (g1) { g1.note = t.value.trim(); renderAll(); } return; }
+    a = t.getAttribute('data-grole'); if (a != null) { var p = a.split(':'), g2 = byId(groups, +p[0]), m = g2 && grMem(g2, +p[1]); if (m) { m.rolle = t.value; renderAll(); } }
+  });
+
   if (window.__KR_NOBOOT !== true) boot();
-  window.__KR = { parseName: parseName, intels: intels, effStage: effStage, suggestStage: suggestStage, firmStrength: firmStrength, firmFacts: firmFacts, fwRestHon: fwRestHon, dateAlarms: dateAlarms, fwWarnings: fwWarnings, LK: LK, lkKey: lkKey, lkId: lkId, toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, fws: fws, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
+  window.__KR = { grLabel: grLabel, groupsOf: groupsOf, assocOf: assocOf, parseName: parseName, intels: intels, groups: groups, effStage: effStage, suggestStage: suggestStage, firmStrength: firmStrength, firmFacts: firmFacts, fwRestHon: fwRestHon, dateAlarms: dateAlarms, fwWarnings: fwWarnings, LK: LK, lkKey: lkKey, lkId: lkId, toRows: toRows, diff: diff, applyData: applyData, get lastRows() { return lastRows; }, set lastRows(v) { lastRows = v; }, parseCSV: parseCSV, impLoadText: impLoadText, schedule: schedule, runSync: runSync, setSB: function (s) { SB = s; }, startSession: startSession, firms: firms, persons: persons, projects: projects, fws: fws, acts: acts, followups: followups, lists: lists, renderAll: renderAll, toQuarter: toQuarter, parseNum: parseNum, getImp: function () { return imp; }, geocodeMissing: geocodeMissing };
 })();
