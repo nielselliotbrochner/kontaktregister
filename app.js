@@ -806,11 +806,10 @@
   function renderFirms() {
     var q = $('#q-f').value.trim().toLowerCase(), kat = $('#k-f').value, ty = $('#y-f').value;
     var mf = $('#m-f'), mv = mf.value; mf.innerHTML = '<option value="">Alle modenheder</option>' + lkNames('company_stage', true).map(function (x) { return '<option value="' + esc(lkKey(x)) + '">' + esc(x.name) + '</option>'; }).join(''); mf.value = mv; mv = mf.value;
-    var gfv = $('#g-f').value;
     var list = firms.filter(function (f) {
-      if (kat && f.kat !== kat) return false;
-      if (gfv === 'in' && !groupsOf(f.id).length) return false;
-      if (gfv === 'out' && groupsOf(f.id).length) return false;
+      if (kat === 'grp') { if (!groupsOf(f.id).length) return false; }
+      else if (kat === 'parent') { if (!isParent(f.id)) return false; }
+      else if (kat && f.kat !== kat) return false;
       if (mv && (f.kat === 'egen' || effStage(f) !== mv)) return false;
       if (ty !== '' && lvl(f, +ty) < 4) return false;
       return !q || (f.navn + ' ' + f.by + ' ' + f.sub + ' ' + f.note + ' ' + groupsOf(f.id).map(grLabel).join(' ')).toLowerCase().indexOf(q) >= 0;
@@ -1253,7 +1252,7 @@
 
   ['v-k', 'q-k', 'k-k', 'l-k', 'r-k', 'mt-k', 'ms-k'].forEach(function (id) { $('#' + id).addEventListener('input', function () { renderMap(id !== 'r-k'); }); });
   ['q-p', 'k-p', 't-p', 'l-p', 's-p'].forEach(function (id) { $('#' + id).addEventListener('input', renderPersons); });
-  ['q-f', 'k-f', 'y-f', 'm-f', 'g-f'].forEach(function (id) { $('#' + id).addEventListener('input', renderFirms); });
+  ['q-f', 'k-f', 'y-f', 'm-f'].forEach(function (id) { $('#' + id).addEventListener('input', renderFirms); });
   ['q-a', 'k-a', 'p-a', 'g-a'].forEach(function (id) { $('#' + id).addEventListener('input', renderActs); });
   $('#v-o').addEventListener('input', renderFu);
   $('#new-a').addEventListener('click', function () { var f = $('#form-a'); f.hidden = !f.hidden; if (!f.hidden) $('#f-title').focus(); });
@@ -2889,6 +2888,7 @@
     groupsOf(fid).forEach(function (g) { g.mem.forEach(function (m) { if (m.firm !== fid && !seen[m.firm] && byId(firms, m.firm)) { seen[m.firm] = 1; out.push(m.firm); } }); });
     return out;
   }
+  function isParent(fid) { return groups.some(function (g) { return g.mem.some(function (m) { return m.firm === fid && m.rolle === 'parent'; }); }); }
   function grMem(g, fid) { for (var i = 0; i < g.mem.length; i++) if (g.mem[i].firm === fid) return g.mem[i]; return null; }
   function grRoleSel(attr, val) {
     return '<select ' + attr + ' aria-label="Rolle"><option value="">Ingen rolle</option>' + lkNames('group_role', false).filter(function (r) { return r.active || lkKey(r) === val; }).map(function (r) {
